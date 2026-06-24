@@ -1,0 +1,41 @@
+# OS / editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Dependencies / caches
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/
+
+# Build / temporary output
+dist/
+build/
+out/
+tmp/
+temp/
+outputs/
+work/
+coverage/
+
+# Local userscript manager exports or private test copies
+*.local.user.js
+*.test.user.js
+*.bak
+
+# Local-only project notes / Git settings
+.gitattributes
+CHANGELOG.md
