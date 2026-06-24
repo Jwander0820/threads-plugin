@@ -7,10 +7,13 @@ const __dirname = dirname(__filename);
 const rootDir = resolve(__dirname, '..');
 const scriptPath = resolve(rootDir, 'threads-plugin.user.js');
 const source = readFileSync(scriptPath, 'utf8');
+const runtimeSource = source.slice(source.indexOf('// ==/UserScript=='));
 
 const checks = [
     ['metadata name', /\/\/ @name\s+Threads Plugin/.test(source)],
-    ['metadata version', /\/\/ @version\s+4\.8\.2/.test(source)],
+    ['metadata version', /\/\/ @version\s+4\.8\.3/.test(source)],
+    ['localized zh-TW metadata', /\/\/ @name:zh-TW\s+Threads Plugin/.test(source) && /\/\/ @description:zh-TW\s+為 Threads/.test(source)],
+    ['localized en metadata', /\/\/ @name:en\s+Threads Plugin/.test(source) && /\/\/ @description:en\s+Download images/.test(source)],
     ['metadata license', /\/\/ @license\s+MIT/.test(source)],
     ['metadata homepageURL', /\/\/ @homepageURL\s+https:\/\/github\.com\/Jwander0820\/threads-plugin/.test(source)],
     ['metadata supportURL', /\/\/ @supportURL\s+https:\/\/github\.com\/Jwander0820\/threads-plugin\/issues/.test(source)],
@@ -42,7 +45,7 @@ const checks = [
     ['post text cleanup support', /cleanPostTextFragment/.test(source)],
     ['inline script scan guarded by WeakSet', /scannedScripts:\s*new WeakSet/.test(source) && /scanInlineScriptsForVideoUrls/.test(source)],
     ['plugin DOM mutation ignored', /new MutationObserver/.test(source) && /POST_TOOL_CLASS/.test(source) && /COPY_TOOL_CLASS/.test(source) && /LINK_TOOL_CLASS/.test(source)],
-    ['no obvious tracking or dynamic code', !/(sendBeacon|document\.cookie|localStorage|sessionStorage|analytics|tracking|eval\(|new Function)/.test(source)]
+    ['no obvious tracking or dynamic code', !/(sendBeacon|document\.cookie|localStorage|sessionStorage|analytics|tracking|eval\(|new Function)/.test(runtimeSource)]
 ];
 
 let failed = 0;
