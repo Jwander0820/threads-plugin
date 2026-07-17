@@ -3,7 +3,7 @@
 // @name:zh-TW  Threads Plugin
 // @name:en     Threads Plugin
 // @namespace    https://github.com/Jwander0820
-// @version      4.8.3
+// @version      4.8.4
 // @description  為 Threads 貼文提供圖片與影片下載、批次資源選擇、貼文文字複製，以及去除追蹤碼的連結複製功能。
 // @description:zh-TW 為 Threads 貼文提供圖片與影片下載、批次資源選擇、貼文文字複製，以及去除追蹤碼的連結複製功能。
 // @description:en Download images and videos from Threads posts, select media in batches, copy post text, and copy links with tracking parameters removed.
@@ -39,6 +39,12 @@
 
 (function () {
     'use strict';
+
+    const IS_NODE_RUNTIME =
+        typeof process !== 'undefined' &&
+        process.release?.name === 'node' &&
+        typeof module !== 'undefined' &&
+        Boolean(module.exports);
 
     const STYLE_ID = 'tm-target-downloader-style';
     const TOAST_ID = 'tm-target-downloader-toast';
@@ -83,6 +89,9 @@
         recentVideoUrls: [],
         scannedScripts: new WeakSet(),
         performanceEntryCursor: 0,
+        performanceEntryStart: 0,
+        performanceStartedAt: 0,
+        mediaRouteKey: '',
         hoverButton: null,
         hoverElement: null,
         hoverMoveRaf: 0,
@@ -285,6 +294,7 @@
     }
 
     function addStyle(cssText) {
+        if (IS_NODE_RUNTIME) return;
         if (document.getElementById(STYLE_ID)) return;
 
         if (typeof GM_addStyle === 'function') {
@@ -798,6 +808,7 @@
     }
 
     function resolveVideoUrl(video, contextElement) {
+        syncMediaRouteScope();
         scanInlineScriptsForVideoUrls();
         scanPerformanceVideoUrls({ onlyNew: false });
 
@@ -838,17 +849,22 @@
     function getPerformanceVideoUrls(options = {}) {
         if (!performance?.getEntriesByType) return [];
 
+        syncMediaRouteScope();
         const entries = performance.getEntriesByType('resource');
         const onlyNew = options.onlyNew === true;
         const cursor = Number(state.performanceEntryCursor) || 0;
-        const startIndex = onlyNew && entries.length >= cursor ? cursor : 0;
+        const routeStart = entries.length >= state.performanceEntryStart
+            ? state.performanceEntryStart
+            : 0;
+        const startIndex = onlyNew && entries.length >= cursor
+            ? Math.max(routeStart, cursor)
+            : routeStart;
 
         if (onlyNew || options.markScanned === true) {
             state.performanceEntryCursor = entries.length;
         }
 
-        return entries
-            .slice(startIndex)
+        return filterRoutePerformanceEntries(entries, startIndex, state.performanceStartedAt)
             .map((entry) => normalizeUrl(entry.name))
             .filter(isVideoUrl)
             .reverse();
@@ -1303,12 +1319,26 @@
                     resolve();
                 }).catch((error) => {
                     warn('blob download failed', error);
-                    copyText(postInfo.postUrl || item.url);
-                    toast('Download failed. Post URL copied.');
+                    toast('Download failed. Please retry or open the post link manually.');
                     resolve();
                 });
                 return;
             }
+
+            let fallbackStarted = false;
+            const tryBlobFallback = (error) => {
+                if (fallbackStarted) return;
+                fallbackStarted = true;
+                warn('GM_download failed, trying blob fallback', error);
+                downloadViaBlob(item, filename).then((finalName) => {
+                    toast(`Download started: ${finalName}`);
+                    resolve();
+                }).catch((blobError) => {
+                    warn('fallback download failed', blobError);
+                    toast('Download failed. Please retry or open the post link manually.');
+                    resolve();
+                });
+            };
 
             GM_download({
                 url: item.url,
@@ -1318,18 +1348,8 @@
                     toast(`Download started: ${filename}`);
                     resolve();
                 },
-                onerror: (error) => {
-                    warn('GM_download failed, trying blob fallback', error);
-                    downloadViaBlob(item, filename).then((finalName) => {
-                        toast(`Download started: ${finalName}`);
-                        resolve();
-                    }).catch((blobError) => {
-                        warn('fallback download failed', blobError);
-                        copyText(postInfo.postUrl || item.url);
-                        toast('Download failed. Post URL copied.');
-                        resolve();
-                    });
-                }
+                onerror: tryBlobFallback,
+                ontimeout: tryBlobFallback
             });
         });
     }
@@ -2747,8 +2767,16 @@
         });
 
         return Array.from(itemByKey.values()).map((item, index) => {
-            return { ...item, index: index + 1, selected: true };
+            return { ...item, index: index + 1, selected: false };
         });
+    }
+
+    function finalizeModalItems({ rawItems, cachedImageItems, cachedVideoItems }) {
+        return dedupeModalItems([
+            ...rawItems,
+            ...cachedImageItems,
+            ...cachedVideoItems
+        ]);
     }
 
     function uniqueElements(elements) {
@@ -2909,13 +2937,10 @@
                 indexHint: rawItems.length + index
             }));
 
-        const domItems = dedupeModalItems([...rawItems, ...cachedImageItems]);
-        if (domItems.length > 0) {
-            return domItems;
-        }
-
-        const hasVisibleVideoEvidence = media.some((element) => element.tagName === 'VIDEO');
-        const cachedVideoItems = (hasVisibleVideoEvidence && postId ? (state.videoUrlsByPostId.get(postId) || []) : [])
+        const hasUnresolvedVideoEvidence = rawItems.some((item) =>
+            item.type === 'video' && !item.resolvedUrl
+        );
+        const cachedVideoItems = (hasUnresolvedVideoEvidence && postId ? (state.videoUrlsByPostId.get(postId) || []) : [])
             .slice()
             .reverse()
             .map((url, index) => ({
@@ -2927,7 +2952,7 @@
                 indexHint: rawItems.length + cachedImageItems.length + index
             }));
 
-        return dedupeModalItems([...rawItems, ...cachedImageItems, ...cachedVideoItems]);
+        return finalizeModalItems({ rawItems, cachedImageItems, cachedVideoItems });
     }
 
     function ensurePostMediaModal() {
@@ -2949,7 +2974,7 @@
                     <button type="button" data-action="download-all">下載所有資源</button>
                 </div>
                 <label class="tm-select-row">
-                    <input type="checkbox" data-action="select-all" checked>
+                    <input type="checkbox" data-action="select-all">
                     <span>全選</span>
                 </label>
                 <div class="tm-list"></div>
@@ -3053,7 +3078,6 @@
             return;
         }
 
-        state.scannedScripts = new WeakSet();
         scanInlineScriptsForVideoUrls();
         scanPerformanceVideoUrls({ onlyNew: false });
         state.modalItems = collectDetailPostMediaItems();
@@ -3087,8 +3111,12 @@
         checkbox.indeterminate = selected > 0 && selected < total;
     }
 
+    function getModalDownloadItems(items, downloadAll) {
+        return items.filter((item) => downloadAll || item.selected);
+    }
+
     async function downloadModalItems(downloadAll) {
-        const items = state.modalItems.filter((item) => downloadAll || item.selected);
+        const items = getModalDownloadItems(state.modalItems, downloadAll);
 
         if (items.length === 0) {
             toast('沒有選取任何資源。');
@@ -3128,6 +3156,70 @@
     function getBackgroundScanIntervalMs() {
         const value = Number(USER_OPTIONS.backgroundScanIntervalMs);
         return Number.isFinite(value) ? Math.max(3000, value) : 12000;
+    }
+
+    function filterRoutePerformanceEntries(entries, startIndex, performanceStartedAt) {
+        const safeStartedAt = Math.max(0, Number(performanceStartedAt) || 0);
+        return entries
+            .slice(startIndex)
+            .filter((entry) => {
+                const entryStartedAt = Number(entry?.startTime);
+                return safeStartedAt === 0 ||
+                    !Number.isFinite(entryStartedAt) ||
+                    entryStartedAt >= safeStartedAt;
+            });
+    }
+
+    function transitionMediaRouteScope(currentScope, nextRouteKey, performanceEntryCount, performanceNow = 0) {
+        const safeEntryCount = Math.max(0, Number(performanceEntryCount) || 0);
+        const safePerformanceNow = Math.max(0, Number(performanceNow) || 0);
+        if (!currentScope.routeKey) {
+            return {
+                ...currentScope,
+                routeKey: nextRouteKey,
+                changed: false
+            };
+        }
+
+        if (currentScope.routeKey === nextRouteKey) {
+            return {
+                ...currentScope,
+                changed: false
+            };
+        }
+
+        return {
+            routeKey: nextRouteKey,
+            performanceEntryStart: safeEntryCount,
+            performanceStartedAt: safePerformanceNow,
+            performanceEntryCursor: safeEntryCount,
+            recentVideoUrls: [],
+            changed: true
+        };
+    }
+
+    function getMediaRouteKey() {
+        return `${location.origin || ''}${location.pathname || ''}`;
+    }
+
+    function syncMediaRouteScope() {
+        const entryCount = performance?.getEntriesByType
+            ? performance.getEntriesByType('resource').length
+            : 0;
+        const nextScope = transitionMediaRouteScope({
+            routeKey: state.mediaRouteKey,
+            performanceEntryStart: state.performanceEntryStart,
+            performanceStartedAt: state.performanceStartedAt,
+            performanceEntryCursor: state.performanceEntryCursor,
+            recentVideoUrls: state.recentVideoUrls
+        }, getMediaRouteKey(), entryCount, performance?.now?.() || 0);
+
+        state.mediaRouteKey = nextScope.routeKey;
+        state.performanceEntryStart = nextScope.performanceEntryStart;
+        state.performanceStartedAt = nextScope.performanceStartedAt;
+        state.performanceEntryCursor = nextScope.performanceEntryCursor;
+        state.recentVideoUrls = nextScope.recentVideoUrls;
+        return nextScope.changed;
     }
 
     function getScrollRefreshTarget(event) {
@@ -3172,6 +3264,7 @@
     function refreshButtons(options = {}) {
         if (!document.body) return;
 
+        syncMediaRouteScope();
         if (options.scanNetwork !== false) {
             scanInlineScriptsForVideoUrls();
             scanPerformanceVideoUrls();
@@ -3225,14 +3318,31 @@
         }, interval - elapsed);
     }
 
-    function rememberVideoUrl(url, postId) {
+    function updateRouteScopedRecentVideoUrls({
+        recentVideoUrls,
+        url,
+        sourceRouteKey,
+        currentRouteKey
+    }) {
+        if (sourceRouteKey !== currentRouteKey) return recentVideoUrls;
+
+        return [
+            url,
+            ...recentVideoUrls.filter((item) => item !== url)
+        ].slice(0, 10);
+    }
+
+    function rememberVideoUrl(url, postId, sourceRouteKey = getMediaRouteKey()) {
         const normalized = normalizeUrl(url);
         if (!isVideoUrl(normalized)) return;
 
-        state.recentVideoUrls = [
-            normalized,
-            ...state.recentVideoUrls.filter((item) => item !== normalized)
-        ].slice(0, 10);
+        syncMediaRouteScope();
+        state.recentVideoUrls = updateRouteScopedRecentVideoUrls({
+            recentVideoUrls: state.recentVideoUrls,
+            url: normalized,
+            sourceRouteKey,
+            currentRouteKey: state.mediaRouteKey
+        });
 
         if (postId) {
             const safePostId = sanitizeFilenamePart(postId);
@@ -3303,13 +3413,13 @@
         return null;
     }
 
-    function walkJsonForVideoUrls(value, postCode) {
+    function walkJsonForVideoUrls(value, postCode, sourceRouteKey) {
         if (!value) return;
 
         if (typeof value === 'string') {
             const normalized = normalizeUrl(value);
             if (isVideoUrl(normalized)) {
-                rememberVideoUrl(normalized, postCode);
+                rememberVideoUrl(normalized, postCode, sourceRouteKey);
             } else if (isImageUrl(normalized)) {
                 rememberImageUrl(normalized, postCode);
             }
@@ -3317,7 +3427,7 @@
         }
 
         if (Array.isArray(value)) {
-            value.forEach((item) => walkJsonForVideoUrls(item, postCode));
+            value.forEach((item) => walkJsonForVideoUrls(item, postCode, sourceRouteKey));
             return;
         }
 
@@ -3326,7 +3436,7 @@
         const nextPostCode = getPostCodeFromObject(value) || postCode;
 
         Object.entries(value).forEach(([, child]) => {
-            walkJsonForVideoUrls(child, nextPostCode);
+            walkJsonForVideoUrls(child, nextPostCode, sourceRouteKey);
         });
     }
 
@@ -3362,16 +3472,16 @@
             const text = script.textContent || '';
             if (!/video_versions|playable_url|video_url|image_versions|\.mp4|\.jpe?g|\.png|\.webp|bytestart|byteend/i.test(text)) return;
 
-            extractVideoUrlsFromText(text);
+            extractVideoUrlsFromText(text, getMediaRouteKey());
         });
     }
 
-    function extractVideoUrlsFromText(text) {
+    function extractVideoUrlsFromText(text, sourceRouteKey = getMediaRouteKey()) {
         if (!text || typeof text !== 'string') return;
 
         const parsedPayload = parseJsonPayload(text);
         if (parsedPayload) {
-            walkJsonForVideoUrls(parsedPayload, null);
+            walkJsonForVideoUrls(parsedPayload, null, sourceRouteKey);
         }
 
         const normalizedText = text
@@ -3386,7 +3496,9 @@
             .map((match) => ({ postId: match[1], index: match.index || 0 }))
             .filter((match) => !/^\d{12,}$/.test(match.postId));
         const currentDetailPostId = getCurrentDetailPostInfo()?.postId || null;
-        const fallbackPostId = postMatches.length === 0 ? currentDetailPostId : null;
+        const fallbackPostId = postMatches.length === 0 && sourceRouteKey === getMediaRouteKey()
+            ? currentDetailPostId
+            : null;
 
         const nearestPostForIndex = (index) => postMatches
             .map((postMatch) => ({
@@ -3398,7 +3510,7 @@
 
         videoMatches.forEach((videoMatch) => {
             const nearestPost = nearestPostForIndex(videoMatch.index);
-            rememberVideoUrl(videoMatch.url, nearestPost?.postId || fallbackPostId);
+            rememberVideoUrl(videoMatch.url, nearestPost?.postId || fallbackPostId, sourceRouteKey);
         });
 
         imageMatches.forEach((imageMatch) => {
@@ -3407,7 +3519,7 @@
         });
     }
 
-    function inspectResponse(response) {
+    function inspectResponse(response, sourceRouteKey) {
         if (!response || typeof response.clone !== 'function') return;
 
         const contentType = response.headers?.get?.('content-type') || '';
@@ -3418,15 +3530,18 @@
 
         if (!shouldInspect) return;
 
-        response.clone().text().then(extractVideoUrlsFromText).catch(() => {});
+        response.clone().text()
+            .then((text) => extractVideoUrlsFromText(text, sourceRouteKey))
+            .catch(() => {});
     }
 
     function installNetworkHooks(targetWindow) {
         const nativeFetch = targetWindow.fetch;
         if (typeof nativeFetch === 'function' && !nativeFetch.__tmTargetWrapped) {
             const wrappedFetch = function (...args) {
+                const sourceRouteKey = getMediaRouteKey();
                 return nativeFetch.apply(this, args).then((response) => {
-                    inspectResponse(response);
+                    inspectResponse(response, sourceRouteKey);
                     return response;
                 });
             };
@@ -3444,6 +3559,7 @@
         if (!nativeOpen.__tmTargetWrapped && !nativeSend.__tmTargetWrapped) {
             xhrCtor.prototype.open = function (method, url, ...rest) {
                 this.__tmTargetUrl = url;
+                this.__tmTargetRouteKey = getMediaRouteKey();
                 return nativeOpen.call(this, method, url, ...rest);
             };
 
@@ -3455,7 +3571,7 @@
                     }
 
                     if (typeof this.responseText === 'string') {
-                        extractVideoUrlsFromText(this.responseText);
+                        extractVideoUrlsFromText(this.responseText, this.__tmTargetRouteKey);
                     }
                 });
 
@@ -3527,6 +3643,18 @@
         startBackgroundScanInterval();
     }
 
+    if (IS_NODE_RUNTIME) {
+        module.exports = {
+            downloadItem,
+            filterRoutePerformanceEntries,
+            finalizeModalItems,
+            getModalDownloadItems,
+            transitionMediaRouteScope,
+            updateRouteScopedRecentVideoUrls
+        };
+        return;
+    }
+
     const pageWindow = typeof unsafeWindow === 'undefined' ? window : unsafeWindow;
     registerUserOptionMenu();
     installNetworkHooks(pageWindow);
@@ -3539,5 +3667,5 @@
     window.setTimeout(refreshButtons, 1800);
     window.setTimeout(refreshButtons, 3600);
 
-    log('v4.8.3 loaded');
+    log('v4.8.4 loaded');
 })();

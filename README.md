@@ -6,7 +6,7 @@ Threads Plugin 是一支用於 Threads 網頁版的 userscript，提供圖片與
 
 - 下載單張圖片。
 - 下載單支影片。
-- 在貼文詳情頁批次選擇並下載圖片與影片。
+- 在貼文詳情頁批次選擇並下載圖片與影片；預設不勾選資源，可手動挑選或直接下載全部。
 - 複製每個貼文 block 的本文內容。
 - 複製去除追蹤碼後的貼文連結。
 - 在 Threads 原生分享選單中加入「複製連結（去追蹤碼）」。
@@ -75,6 +75,18 @@ node --check .\threads-plugin.user.js
 
 ```powershell
 node .\scripts\verify-threads-plugin.mjs
+```
+
+執行混合媒體、SPA 換頁 cache 隔離、下載逾時與剪貼簿回歸測試：
+
+```powershell
+node --test
+```
+
+也可以一次執行全部驗證：
+
+```powershell
+npm.cmd run verify
 ```
 
 上架前建議手動確認：

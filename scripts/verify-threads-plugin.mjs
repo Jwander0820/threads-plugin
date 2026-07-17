@@ -11,7 +11,7 @@ const runtimeSource = source.slice(source.indexOf('// ==/UserScript=='));
 
 const checks = [
     ['metadata name', /\/\/ @name\s+Threads Plugin/.test(source)],
-    ['metadata version', /\/\/ @version\s+4\.8\.3/.test(source)],
+    ['metadata version', /\/\/ @version\s+4\.8\.4/.test(source)],
     ['localized zh-TW metadata', /\/\/ @name:zh-TW\s+Threads Plugin/.test(source) && /\/\/ @description:zh-TW\s+為 Threads/.test(source)],
     ['localized en metadata', /\/\/ @name:en\s+Threads Plugin/.test(source) && /\/\/ @description:en\s+Download images/.test(source)],
     ['metadata license', /\/\/ @license\s+MIT/.test(source)],

@@ -1,0 +1,9 @@
+{
+  "name": "threads-plugin",
+  "version": "4.8.4",
+  "private": true,
+  "scripts": {
+    "test": "node --test",
+    "verify": "node --check ./threads-plugin.user.js && node ./scripts/verify-threads-plugin.mjs && node --test"
+  }
+}
