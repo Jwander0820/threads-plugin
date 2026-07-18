@@ -3,7 +3,7 @@
 // @name:zh-TW  Threads Plugin
 // @name:en     Threads Plugin
 // @namespace    https://github.com/Jwander0820
-// @version      4.8.4
+// @version      4.8.5
 // @description  為 Threads 貼文提供圖片與影片下載、批次資源選擇、貼文文字複製，以及去除追蹤碼的連結複製功能。
 // @description:zh-TW 為 Threads 貼文提供圖片與影片下載、批次資源選擇、貼文文字複製，以及去除追蹤碼的連結複製功能。
 // @description:en Download images and videos from Threads posts, select media in batches, copy post text, and copy links with tracking parameters removed.
@@ -11,6 +11,8 @@
 // @license      MIT
 // @homepageURL  https://github.com/Jwander0820/threads-plugin
 // @supportURL   https://github.com/Jwander0820/threads-plugin/issues
+// @updateURL    https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/threads-plugin.user.js
+// @downloadURL  https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/threads-plugin.user.js
 // @match        https://www.threads.com/*
 // @match        https://threads.com/*
 // @match        https://www.threads.net/*
@@ -3667,5 +3669,5 @@
     window.setTimeout(refreshButtons, 1800);
     window.setTimeout(refreshButtons, 3600);
 
-    log('v4.8.4 loaded');
+    log('v4.8.5 loaded');
 })();

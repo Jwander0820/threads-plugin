@@ -11,12 +11,16 @@ const runtimeSource = source.slice(source.indexOf('// ==/UserScript=='));
 
 const checks = [
     ['metadata name', /\/\/ @name\s+Threads Plugin/.test(source)],
-    ['metadata version', /\/\/ @version\s+4\.8\.4/.test(source)],
+    ['metadata version', /\/\/ @version\s+4\.8\.5/.test(source)],
     ['localized zh-TW metadata', /\/\/ @name:zh-TW\s+Threads Plugin/.test(source) && /\/\/ @description:zh-TW\s+為 Threads/.test(source)],
     ['localized en metadata', /\/\/ @name:en\s+Threads Plugin/.test(source) && /\/\/ @description:en\s+Download images/.test(source)],
     ['metadata license', /\/\/ @license\s+MIT/.test(source)],
     ['metadata homepageURL', /\/\/ @homepageURL\s+https:\/\/github\.com\/Jwander0820\/threads-plugin/.test(source)],
     ['metadata supportURL', /\/\/ @supportURL\s+https:\/\/github\.com\/Jwander0820\/threads-plugin\/issues/.test(source)],
+    ['metadata update URLs', [
+        '@updateURL    https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/threads-plugin.user.js',
+        '@downloadURL  https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/threads-plugin.user.js'
+    ].every((entry) => source.includes(`// ${entry}`))],
     ['Threads matches', [
         'https://www.threads.com/*',
         'https://threads.com/*',

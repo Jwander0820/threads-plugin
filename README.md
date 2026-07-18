@@ -25,6 +25,8 @@ Threads Plugin 是一支用於 Threads 網頁版的 userscript，提供圖片與
 3. 依照 userscript 管理器提示安裝或更新腳本。
 4. 重新整理 Threads 網頁版。
 
+從上述 GitHub Raw URL 安裝時，Tampermonkey 等 userscript 管理器會依照腳本內的 `@updateURL` 與 `@downloadURL` 定期檢查更新。發布新版時必須同步提高 `@version`，管理器才會辨識為新版本。從 Greasy Fork 安裝的版本則由 Greasy Fork 提供更新來源。
+
 ## 支援網站
 
 - `https://www.threads.com/*`
