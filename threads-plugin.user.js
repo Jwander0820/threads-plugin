@@ -3,7 +3,7 @@
 // @name:zh-TW  Threads Plugin
 // @name:en     Threads Plugin
 // @namespace    https://github.com/Jwander0820
-// @version      4.8.5
+// @version      4.8.6
 // @description  為 Threads 貼文提供圖片與影片下載、批次資源選擇、貼文文字複製，以及去除追蹤碼的連結複製功能。
 // @description:zh-TW 為 Threads 貼文提供圖片與影片下載、批次資源選擇、貼文文字複製，以及去除追蹤碼的連結複製功能。
 // @description:en Download images and videos from Threads posts, select media in batches, copy post text, and copy links with tracking parameters removed.
@@ -337,15 +337,16 @@
             opacity: 1 !important;
         }
 
-        .${BUTTON_CLASS}::before {
-            content: "" !important;
+        .${BUTTON_CLASS} svg {
             width: 20px !important;
             height: 20px !important;
-            background:
-                linear-gradient(#fff, #fff) center 3px / 2px 11px no-repeat,
-                linear-gradient(45deg, transparent 45%, #fff 47% 60%, transparent 62%) center 11px / 9px 9px no-repeat,
-                linear-gradient(-45deg, transparent 45%, #fff 47% 60%, transparent 62%) center 11px / 9px 9px no-repeat,
-                linear-gradient(#fff, #fff) center 17px / 12px 2px no-repeat !important;
+            display: block !important;
+            fill: none !important;
+            stroke: currentColor !important;
+            stroke-width: 1.75 !important;
+            stroke-linecap: round !important;
+            stroke-linejoin: round !important;
+            pointer-events: none !important;
             flex: 0 0 auto !important;
         }
 
@@ -410,18 +411,7 @@
             margin-top: 8px !important;
         }
 
-        .${POST_TOOL_CLASS}::before {
-            content: "" !important;
-            width: 21px !important;
-            height: 21px !important;
-            transform: translateY(0.5px) !important;
-            background:
-                linear-gradient(currentColor, currentColor) center 2px / 2px 11px no-repeat,
-                linear-gradient(45deg, transparent 45%, currentColor 47% 60%, transparent 62%) center 10px / 9px 9px no-repeat,
-                linear-gradient(-45deg, transparent 45%, currentColor 47% 60%, transparent 62%) center 10px / 9px 9px no-repeat,
-                linear-gradient(currentColor, currentColor) center 17px / 13px 2px no-repeat !important;
-        }
-
+        .${POST_TOOL_CLASS} svg,
         .${COPY_TOOL_CLASS} svg,
         .${LINK_TOOL_CLASS} svg {
             width: 20px !important;
@@ -1087,7 +1077,7 @@
             return;
         }
 
-        navigator.clipboard?.writeText(text).catch(() => {});
+        navigator.clipboard?.writeText(text).catch(() => { });
     }
 
     function buildCleanThreadsPostUrl(postInfo) {
@@ -1430,7 +1420,7 @@
         try {
             const playPromise = video.play?.();
             if (playPromise?.catch) {
-                await playPromise.catch(() => {});
+                await playPromise.catch(() => { });
             }
         } catch (error) {
             // Autoplay can be blocked; network hooks may still capture URLs.
@@ -1588,7 +1578,11 @@
         const button = document.createElement('button');
         button.type = 'button';
         button.className = BUTTON_CLASS;
-        button.textContent = '';
+        button.innerHTML = `
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M12 4v12M8 12l4 4 4-4M4 20h16" />
+            </svg>
+        `;
         button.title = 'Download this Threads media';
         button.setAttribute('aria-label', 'Download this Threads media');
         button.dataset.tmHidden = '1';
@@ -2685,6 +2679,11 @@
             button.className = POST_TOOL_CLASS;
             button.title = 'Open Threads media downloader';
             button.setAttribute('aria-label', 'Open Threads media downloader');
+            button.innerHTML = `
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M12 4v12M8 12l4 4 4-4M4 20h16" />
+                </svg>
+            `;
             button.addEventListener('click', (event) => {
                 blockEvent(event);
                 openPostMediaModal();
@@ -3534,7 +3533,7 @@
 
         response.clone().text()
             .then((text) => extractVideoUrlsFromText(text, sourceRouteKey))
-            .catch(() => {});
+            .catch(() => { });
     }
 
     function installNetworkHooks(targetWindow) {
@@ -3669,5 +3668,5 @@
     window.setTimeout(refreshButtons, 1800);
     window.setTimeout(refreshButtons, 3600);
 
-    log('v4.8.5 loaded');
+    log('v4.8.6 loaded');
 })();
