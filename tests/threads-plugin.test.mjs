@@ -7,7 +7,9 @@ const {
     downloadItem,
     filterRoutePerformanceEntries,
     finalizeModalItems,
+    findShareSvgFromEvent,
     getModalDownloadItems,
+    isNativeCopyLinkActionRect,
     transitionMediaRouteScope,
     updateRouteScopedRecentVideoUrls
 } = require('../threads-plugin.user.js');
@@ -15,6 +17,45 @@ const {
 globalThis.location = {
     href: 'https://www.threads.com/@current/post/POST_B'
 };
+
+test('new share sheet accepts the 80px-wide native copy-link action', () => {
+    assert.equal(isNativeCopyLinkActionRect({
+        width: 80,
+        height: 110,
+        top: 556,
+        right: 790,
+        bottom: 666,
+        left: 710
+    }, 950, 1064), true);
+
+    assert.equal(isNativeCopyLinkActionRect({
+        width: 48,
+        height: 17,
+        top: 622,
+        right: 774,
+        bottom: 639,
+        left: 726
+    }, 950, 1064), false);
+});
+
+test('share context is detected when the click lands on the outer button', () => {
+    const shareSvg = {
+        tagName: 'svg',
+        getAttribute: (name) => name === 'aria-label' ? '分享' : null,
+        querySelector: () => null
+    };
+    const outerButton = {
+        tagName: 'DIV',
+        matches: (selector) => selector.includes('[role="button"]'),
+        querySelectorAll: () => [shareSvg],
+        closest: () => outerButton
+    };
+
+    assert.equal(findShareSvgFromEvent({
+        target: outerButton,
+        composedPath: () => [outerButton]
+    }), shareSvg);
+});
 
 test('media picker includes a cached video beside resolved images', () => {
     const items = finalizeModalItems({

@@ -3,7 +3,7 @@
 // @name:zh-TW  Threads Plugin
 // @name:en     Threads Plugin
 // @namespace    https://github.com/Jwander0820
-// @version      4.8.6
+// @version      4.8.7
 // @description  為 Threads 貼文提供圖片與影片下載、批次資源選擇、貼文文字複製，以及去除追蹤碼的連結複製功能。
 // @description:zh-TW 為 Threads 貼文提供圖片與影片下載、批次資源選擇、貼文文字複製，以及去除追蹤碼的連結複製功能。
 // @description:en Download images and videos from Threads posts, select media in batches, copy post text, and copy links with tracking parameters removed.
@@ -2107,13 +2107,31 @@
         return /分享|share/i.test(label);
     }
 
+    function findShareSvgInControl(control) {
+        if (!control) return null;
+        if (control.tagName?.toLowerCase?.() === 'svg' && isShareSvg(control)) {
+            return control;
+        }
+
+        return Array.from(control.querySelectorAll?.('svg[aria-label], svg') || [])
+            .find(isShareSvg) || null;
+    }
+
     function findShareSvgFromEvent(event) {
         const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
         const pathSvg = path.find((node) => node?.tagName?.toLowerCase?.() === 'svg' && isShareSvg(node));
         if (pathSvg) return pathSvg;
 
-        const targetSvg = event.target?.closest?.('svg[aria-label]');
-        return targetSvg && isShareSvg(targetSvg) ? targetSvg : null;
+        const pathControl = path.find((node) =>
+            node?.matches?.('[role="button"], button, a, [tabindex="0"]')
+        );
+        const pathControlSvg = findShareSvgInControl(pathControl);
+        if (pathControlSvg) return pathControlSvg;
+
+        const targetControl = event.target?.closest?.(
+            'svg[aria-label], [role="button"], button, a, [tabindex="0"]'
+        );
+        return findShareSvgInControl(targetControl);
     }
 
     function removeInjectedCleanLinkMenuItems() {
@@ -2150,6 +2168,15 @@
         return String(value || '').replace(/\s+/g, ' ').trim();
     }
 
+    function isNativeCopyLinkActionRect(rect, viewportWidth, viewportHeight) {
+        return rect.width > 24 &&
+            rect.height > 24 &&
+            rect.bottom > 0 &&
+            rect.right > 0 &&
+            rect.top < viewportHeight &&
+            rect.left < viewportWidth;
+    }
+
     function findNativeCopyLinkMenuItem() {
         const candidates = Array.from(document.querySelectorAll(
             '[role="menuitem"], [role="button"], button, [tabindex="0"]'
@@ -2161,12 +2188,11 @@
             })
             .filter((element) => {
                 const rect = element.getBoundingClientRect();
-                return rect.width > 80 &&
-                    rect.height > 24 &&
-                    rect.bottom > 0 &&
-                    rect.right > 0 &&
-                    rect.top < window.innerHeight &&
-                    rect.left < window.innerWidth;
+                return isNativeCopyLinkActionRect(
+                    rect,
+                    window.innerWidth,
+                    window.innerHeight
+                );
             })
             .sort((a, b) => {
                 const aRect = a.getBoundingClientRect();
@@ -2192,11 +2218,41 @@
         );
 
         if (labelNode) {
-            labelNode.nodeValue = '複製連結（去追蹤碼）';
+            labelNode.nodeValue = '原始連結';
         }
 
-        menuItem.setAttribute('aria-label', '複製連結（去追蹤碼）');
-        menuItem.title = '複製連結（去追蹤碼）';
+        menuItem.setAttribute('aria-label', '複製去除追蹤碼的連結');
+        menuItem.title = '複製去除追蹤碼的連結';
+    }
+
+    function replaceCleanLinkMenuIcon(menuItem) {
+        const icon = menuItem.querySelector('svg');
+        if (!icon) return;
+
+        icon.setAttribute('aria-hidden', 'true');
+        icon.setAttribute('viewBox', '0 0 24 24');
+        icon.setAttribute('width', '24');
+        icon.setAttribute('height', '24');
+        icon.setAttribute('fill', 'none');
+        icon.setAttribute('stroke', 'currentColor');
+        icon.setAttribute('stroke-width', '2');
+        icon.setAttribute('stroke-linecap', 'round');
+        icon.setAttribute('stroke-linejoin', 'round');
+        icon.innerHTML = `
+            <path d="M15 8.5l1.5-1.5a3.536 3.536 0 0 1 5 5l-3.5 3.5a3.536 3.536 0 0 1-5 0" />
+            <path d="M9 15.5l-1.5 1.5a3.536 3.536 0 0 1-5-5l3.5-3.5a3.536 3.536 0 0 1 5 0" />
+            <path d="M9.5 14.5l3-3" />
+            <path d="M3.5 3.5l2 2" />
+            <path d="M1.5 8h2.5" />
+            <path d="M8 1.5v2.5" />
+        `;
+        icon.querySelectorAll('path').forEach((path) => {
+            path.style.setProperty('fill', 'none', 'important');
+            path.style.setProperty('stroke', 'currentColor', 'important');
+            path.style.setProperty('stroke-width', '2', 'important');
+            path.style.setProperty('stroke-linecap', 'round', 'important');
+            path.style.setProperty('stroke-linejoin', 'round', 'important');
+        });
     }
 
     function isVisibleMenuItem(element) {
@@ -2243,7 +2299,7 @@
 
     function injectCleanLinkMenuItem() {
         const context = state.pendingShareContext;
-        if (!context?.cleanUrl || Date.now() - context.createdAt > 8000) return false;
+        if (!context?.cleanUrl || Date.now() - context.createdAt > 12000) return false;
         if (document.querySelector(`.${CLEAN_LINK_MENU_CLASS}`)) return true;
 
         const nativeItem = findNativeCopyLinkMenuItem();
@@ -2254,6 +2310,7 @@
         cleanItem.removeAttribute('id');
         cleanItem.querySelectorAll('[id]').forEach((element) => element.removeAttribute('id'));
         replaceNativeCopyLinkLabel(cleanItem);
+        replaceCleanLinkMenuIcon(cleanItem);
 
         cleanItem.addEventListener('pointerdown', stopButtonEvent, true);
         cleanItem.addEventListener('mousedown', stopButtonEvent, true);
@@ -2276,7 +2333,7 @@
             if (injectCleanLinkMenuItem()) return;
 
             const context = state.pendingShareContext;
-            if (context && Date.now() - context.createdAt <= 8000 && attempt < 24) {
+            if (context && Date.now() - context.createdAt <= 12000 && attempt < 100) {
                 scheduleCleanLinkMenuInjection(attempt + 1);
             }
         }, attempt === 0 ? 0 : 80);
@@ -3649,7 +3706,9 @@
             downloadItem,
             filterRoutePerformanceEntries,
             finalizeModalItems,
+            findShareSvgFromEvent,
             getModalDownloadItems,
+            isNativeCopyLinkActionRect,
             transitionMediaRouteScope,
             updateRouteScopedRecentVideoUrls
         };
@@ -3668,5 +3727,5 @@
     window.setTimeout(refreshButtons, 1800);
     window.setTimeout(refreshButtons, 3600);
 
-    log('v4.8.6 loaded');
+    log('v4.8.7 loaded');
 })();

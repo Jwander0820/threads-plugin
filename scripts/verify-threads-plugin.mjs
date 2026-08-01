@@ -11,7 +11,7 @@ const runtimeSource = source.slice(source.indexOf('// ==/UserScript=='));
 
 const checks = [
     ['metadata name', /\/\/ @name\s+Threads Plugin/.test(source)],
-    ['metadata version', /\/\/ @version\s+4\.8\.5/.test(source)],
+    ['metadata version', /\/\/ @version\s+4\.8\.7/.test(source)],
     ['localized zh-TW metadata', /\/\/ @name:zh-TW\s+Threads Plugin/.test(source) && /\/\/ @description:zh-TW\s+為 Threads/.test(source)],
     ['localized en metadata', /\/\/ @name:en\s+Threads Plugin/.test(source) && /\/\/ @description:en\s+Download images/.test(source)],
     ['metadata license', /\/\/ @license\s+MIT/.test(source)],
@@ -45,6 +45,10 @@ const checks = [
     ['copy post text support', /copyPostBlockText/.test(source) && /GM_setClipboard/.test(source)],
     ['direct clean-link support', /copyPostBlockCleanLink/.test(source) && /buildCleanThreadsPostUrl/.test(source)],
     ['native share clean-link support', /CLEAN_LINK_MENU_CLASS/.test(source) && /closeNativeShareMenu/.test(source)],
+    ['native share broken-link icon', /replaceCleanLinkMenuIcon/.test(source) && /M15 8\.5l1\.5-1\.5/.test(source) && /M8 1\.5v2\.5/.test(source)],
+    ['native share icon style isolation', /path\.style\.setProperty\('fill', 'none', 'important'\)/.test(source)],
+    ['native share concise clean-link label', /labelNode\.nodeValue = '原始連結'/.test(source) && /複製去除追蹤碼的連結/.test(source)],
+    ['native share outer-control targeting', /findShareSvgInControl/.test(source) && /pathControlSvg/.test(source)],
     ['quoted-post targeting support', /findBestPostInfoInNode/.test(source) && /findPostBlockRootFromShareButton/.test(source)],
     ['post text cleanup support', /cleanPostTextFragment/.test(source)],
     ['inline script scan guarded by WeakSet', /scannedScripts:\s*new WeakSet/.test(source) && /scanInlineScriptsForVideoUrls/.test(source)],
