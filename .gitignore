@@ -35,7 +35,3 @@ coverage/
 *.local.user.js
 *.test.user.js
 *.bak
-
-# Local-only project notes / Git settings
-.gitattributes
-CHANGELOG.md

@@ -1,6 +1,6 @@
 {
   "name": "threads-plugin",
-  "version": "4.8.7",
+  "version": "5.0.0",
   "private": true,
   "scripts": {
     "test": "node --test",
