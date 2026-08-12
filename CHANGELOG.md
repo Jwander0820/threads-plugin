@@ -26,10 +26,12 @@ All notable changes to this project are documented in this file.
 - Fixed media from previous routes, adjacent feed posts, replies, reposts, or quoted posts being selected as another post's fallback.
 - Fixed mixed image/video pickers losing videos, misordering carousel items, or showing all video previews as landscape.
 - Fixed the first carousel image being appended twice when its structured and cached URLs differed only by `ig_cache_key`.
+- Fixed post-level representative media being added before the authoritative `carousel_media` sequence, which could make the first carousel image appear twice.
 - Fixed legitimate duplicate carousel slots being collapsed when they intentionally shared the same media URL.
 - Fixed a later DOM media preview being attached to an earlier cache-only carousel slot.
 - Fixed hover downloads on deeply nested feed carousels falling back to `unknown_` filenames.
 - Fixed a global click debounce causing the first click on another idle media button to be ignored; per-button busy state now prevents duplicates without swallowing valid downloads.
+- Fixed Threads music attachment lyrics being appended to copied post text; text extraction now stops before the music player while preserving the author's caption.
 
 ### Security
 

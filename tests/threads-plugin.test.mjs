@@ -17,6 +17,7 @@ const {
     finalizeModalItems,
     findPostContext,
     findShareSvgFromEvent,
+    getPostBlockTextBoundary,
     getModalDownloadItems,
     getVideoThumbnailLayout,
     inspectResponse,
@@ -376,6 +377,62 @@ test('structured media extraction preserves repeated carousel slots with the sam
             ['image', repeatedPhoto, 'REPEATED_POST']
         ]
     );
+});
+
+test('structured media extraction ignores a post-level cover duplicated by carousel_media', () => {
+    const firstPhoto = 'https://cdninstagram.com/media/first.jpg?ig_cache_key=FIRST.3-ccb7-5';
+    const secondPhoto = 'https://cdninstagram.com/media/second.jpg?ig_cache_key=SECOND.3-ccb7-5';
+    const records = collectStructuredMediaUrls({
+        code: 'Db5Yl8zEVFh',
+        image_versions2: {
+            candidates: [{ url: firstPhoto, width: 100, height: 100 }]
+        },
+        carousel_media: [
+            {
+                image_versions2: {
+                    candidates: [{ url: firstPhoto, width: 100, height: 100 }]
+                }
+            },
+            {
+                image_versions2: {
+                    candidates: [{ url: secondPhoto, width: 100, height: 100 }]
+                }
+            }
+        ]
+    });
+
+    assert.deepEqual(
+        records.map((record) => [record.type, record.url, record.postId]),
+        [
+            ['image', firstPhoto, 'Db5Yl8zEVFh'],
+            ['image', secondPhoto, 'Db5Yl8zEVFh']
+        ]
+    );
+});
+
+test('post text boundary stops before Threads music lyrics', () => {
+    const musicControl = {
+        getAttribute: (name) => {
+            if (name === 'aria-label') return '播放音樂';
+            if (name === 'role') return 'button';
+            return null;
+        },
+        matches: (selector) => selector === 'button,[role="button"]',
+        getBoundingClientRect: () => ({ top: 240, bottom: 304 })
+    };
+    const root = {
+        getBoundingClientRect: () => ({ top: 90, bottom: 640 }),
+        querySelectorAll: (selector) => {
+            if (selector === 'img, video') return [];
+            if (selector === '[aria-label]') return [musicControl];
+            return [];
+        }
+    };
+    const actionBar = {
+        getBoundingClientRect: () => ({ top: 520 })
+    };
+
+    assert.equal(getPostBlockTextBoundary(root, actionBar), 240);
 });
 
 test('new share sheet accepts the 80px-wide native copy-link action', () => {

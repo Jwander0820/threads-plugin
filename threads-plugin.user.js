@@ -1295,9 +1295,30 @@
             .replace(/^\n+|\n+$/g, '');
     }
 
+    function isThreadsMusicPlaybackControl(element) {
+        if (!element?.matches?.('button,[role="button"]')) return false;
+
+        const label = String(element.getAttribute?.('aria-label') || '').trim();
+        return /^(?:播放|暫停|暂停)音[樂乐]$/.test(label) ||
+            /^(?:play|pause)\s+music$/i.test(label) ||
+            /^(?:音楽を再生|音楽を一時停止)$/.test(label);
+    }
+
+    function getThreadsMusicAttachmentTop(root) {
+        const rootRect = root.getBoundingClientRect();
+        return Array.from(root.querySelectorAll('[aria-label]'))
+            .filter(isThreadsMusicPlaybackControl)
+            .map((element) => element.getBoundingClientRect())
+            .filter((rect) => Number.isFinite(rect.top) && rect.bottom > rootRect.top)
+            .map((rect) => rect.top)
+            .filter((top) => top >= rootRect.top)
+            .sort((a, b) => a - b)[0];
+    }
+
     function getPostBlockTextBoundary(root, actionBar) {
         const rootRect = root.getBoundingClientRect();
         const actionTop = actionBar?.getBoundingClientRect?.().top;
+        const musicAttachmentTop = getThreadsMusicAttachmentTop(root);
         const mediaTop = Array.from(root.querySelectorAll('img, video'))
             .filter(isDownloadableHoverMedia)
             .map((element) => element.getBoundingClientRect())
@@ -1308,6 +1329,7 @@
 
         return Math.min(
             Number.isFinite(mediaTop) ? mediaTop : Infinity,
+            Number.isFinite(musicAttachmentTop) ? musicAttachmentTop : Infinity,
             Number.isFinite(actionTop) ? actionTop : Infinity,
             rootRect.bottom
         );
@@ -4269,23 +4291,29 @@
             visited.add(node);
 
             const nextPostCode = getPostCodeFromObject(node) || postCode;
-            const renditionVideoUrl = pickBestStructuredMediaUrl(node.video_versions, 'video');
-            const directVideoUrl = ['playable_url', 'video_url']
-                .map((key) => validateMediaUrl(node[key], 'video'))
-                .find((result) => result.ok)?.url || null;
-            const videoUrl = renditionVideoUrl || directVideoUrl;
-            if (videoUrl) addRecord('video', videoUrl, nextPostCode, preserveDuplicateSlots);
+            const hasCarouselMedia = Array.isArray(node.carousel_media) && node.carousel_media.length > 0;
+            // Threads can expose the first carousel item again as a post-level
+            // representative image.  The carousel array is the authoritative
+            // slot sequence, so do not record that wrapper-level duplicate.
+            if (!hasCarouselMedia) {
+                const renditionVideoUrl = pickBestStructuredMediaUrl(node.video_versions, 'video');
+                const directVideoUrl = ['playable_url', 'video_url']
+                    .map((key) => validateMediaUrl(node[key], 'video'))
+                    .find((result) => result.ok)?.url || null;
+                const videoUrl = renditionVideoUrl || directVideoUrl;
+                if (videoUrl) addRecord('video', videoUrl, nextPostCode, preserveDuplicateSlots);
 
-            const imageCandidates = node.image_versions2?.candidates || node.image_versions?.candidates;
-            const imageUrl = pickBestStructuredMediaUrl(imageCandidates, 'image');
-            if (!videoUrl && imageUrl) addRecord('image', imageUrl, nextPostCode, preserveDuplicateSlots);
+                const imageCandidates = node.image_versions2?.candidates || node.image_versions?.candidates;
+                const imageUrl = pickBestStructuredMediaUrl(imageCandidates, 'image');
+                if (!videoUrl && imageUrl) addRecord('image', imageUrl, nextPostCode, preserveDuplicateSlots);
 
-            if (!videoUrl && !imageUrl) {
-                ['display_url', 'image_url', 'thumbnail_src', 'thumbnail_url'].forEach((key) => {
-                    if (typeof node[key] === 'string') {
-                        addRecord('image', node[key], nextPostCode, preserveDuplicateSlots);
-                    }
-                });
+                if (!videoUrl && !imageUrl) {
+                    ['display_url', 'image_url', 'thumbnail_src', 'thumbnail_url'].forEach((key) => {
+                        if (typeof node[key] === 'string') {
+                            addRecord('image', node[key], nextPostCode, preserveDuplicateSlots);
+                        }
+                    });
+                }
             }
 
             Object.entries(node).forEach(([key, child]) => {
@@ -4916,6 +4944,7 @@
             findPostContext,
             findNativeShareMenuContainer,
             findShareSvgFromEvent,
+            getPostBlockTextBoundary,
             getMediaUrlIdentity,
             getModalDownloadItems,
             getVideoThumbnailLayout,
