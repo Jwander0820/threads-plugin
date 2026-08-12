@@ -55,6 +55,7 @@
     const COPY_TOOL_CLASS = 'tm-post-copy-tool-button';
     const LINK_TOOL_CLASS = 'tm-post-link-tool-button';
     const CLEAN_LINK_MENU_CLASS = 'tm-clean-link-menu-item';
+    const CLEAN_LINK_ICON_PATH = 'M245.14 352.14c8.49-8.49 22.27-8.49 30.76 0 8.5 8.5 8.5 22.27 0 30.76l-58.53 58.54c-20.35 20.34-47.15 30.51-73.94 30.51s-53.6-10.17-73.94-30.51c-20.34-20.35-30.52-47.15-30.52-73.94 0-26.78 10.18-53.6 30.52-73.94l58.53-58.53c8.5-8.5 22.27-8.5 30.77 0 8.49 8.49 8.49 22.27 0 30.76l-58.54 58.53c-11.84 11.85-17.77 27.51-17.77 43.18 0 15.67 5.93 31.33 17.77 43.17 11.85 11.85 27.51 17.78 43.18 17.78 15.67 0 31.33-5.93 43.17-17.77l58.54-58.54zm46.1-92.68c8.47 8.48 8.47 22.24 0 30.71-8.48 8.47-22.23 8.47-30.71 0l-39.78-39.78c-8.47-8.48-8.47-22.23 0-30.71 8.48-8.47 22.23-8.47 30.71 0l39.78 39.78zm45.28 245.07-25.07 5.19c-3.24.66-6.43-1.44-7.09-4.68l-16.18-78.09a6.006 6.006 0 0 1 4.66-7.11l25.05-5.29c3.27-.65 6.45 1.44 7.11 4.69l16.21 78.2c.66 3.25-1.44 6.43-4.69 7.09zM178.82 6.26 203.39.18c3.22-.8 6.48 1.17 7.28 4.38l19.46 77.29c.8 3.23-1.16 6.5-4.39 7.31l-24.8 6.28c-3.23.8-6.5-1.16-7.31-4.38l-19.46-77.43c-.81-3.23 1.16-6.5 4.38-7.31l.27-.06zm264.17 419.63-17.86 18.43a6.03 6.03 0 0 1-8.52 0l-57.22-55.51a6.015 6.015 0 0 1-.11-8.5l17.8-18.39c2.32-2.38 6.13-2.44 8.51-.12l57.28 55.58a6.027 6.027 0 0 1 .12 8.51zm68.81-112.11-6.62 24.69c-.85 3.21-4.15 5.12-7.37 4.26l-77.08-20.62c-3.22-.86-5.12-4.16-4.27-7.38l6.64-24.72c.86-3.21 4.16-5.12 7.38-4.27l77.05 20.67c3.21.85 5.12 4.16 4.27 7.37zM.38 201.65l6.97-24.15a6.025 6.025 0 0 1 7.42-4.11l76.66 21.79c3.2.91 5.05 4.25 4.15 7.45l-6.96 24.61a6.034 6.034 0 0 1-7.42 4.17L4.38 209.55a6.035 6.035 0 0 1-4.15-7.45l.15-.45zM65.14 87.17l17.84-17.81c2.35-2.34 6.17-2.33 8.51.02l56.38 56.41c2.33 2.35 2.33 6.15 0 8.49l-18.06 18.11a6.014 6.014 0 0 1-8.5.02L64.85 95.97a6.03 6.03 0 0 1 0-8.52l.29-.28zm200.98 71.28c-8.49 8.5-22.27 8.5-30.76 0-8.5-8.49-8.5-22.26 0-30.76l59.26-59.26 1.38-1.27c20.23-19.51 46.43-29.26 72.56-29.26 26.78 0 53.58 10.18 73.93 30.53 20.35 20.35 30.53 47.16 30.53 73.94 0 26.79-10.18 53.59-30.52 73.94l-59.26 59.26c-8.5 8.49-22.27 8.49-30.77 0-8.49-8.49-8.49-22.27 0-30.76l59.27-59.27c11.84-11.84 17.77-27.5 17.77-43.17 0-15.67-5.93-31.33-17.77-43.17-11.86-11.86-27.52-17.79-43.18-17.79-15.3 0-30.55 5.59-42.22 16.76l-60.22 60.28z';
     const MODAL_ID = 'tm-post-media-modal';
     const LOG_PREFIX = '[Threads Target Downloader]';
     const SCAN_DEBOUNCE_MS = 400;
@@ -2748,28 +2749,18 @@
         if (!icon) return;
 
         icon.setAttribute('aria-hidden', 'true');
-        icon.setAttribute('viewBox', '0 0 24 24');
+        icon.setAttribute('viewBox', '0 0 512 509.84');
         icon.setAttribute('width', '24');
         icon.setAttribute('height', '24');
-        icon.setAttribute('fill', 'none');
-        icon.setAttribute('stroke', 'currentColor');
-        icon.setAttribute('stroke-width', '2');
-        icon.setAttribute('stroke-linecap', 'round');
-        icon.setAttribute('stroke-linejoin', 'round');
+        icon.setAttribute('fill', 'currentColor');
+        icon.setAttribute('stroke', 'none');
+        icon.setAttribute('preserveAspectRatio', 'xMidYMid meet');
         icon.innerHTML = `
-            <path d="M15 8.5l1.5-1.5a3.536 3.536 0 0 1 5 5l-3.5 3.5a3.536 3.536 0 0 1-5 0" />
-            <path d="M9 15.5l-1.5 1.5a3.536 3.536 0 0 1-5-5l3.5-3.5a3.536 3.536 0 0 1 5 0" />
-            <path d="M9.5 14.5l3-3" />
-            <path d="M3.5 3.5l2 2" />
-            <path d="M1.5 8h2.5" />
-            <path d="M8 1.5v2.5" />
+            <path fill="currentColor" stroke="none" fill-rule="nonzero" d="${CLEAN_LINK_ICON_PATH}" />
         `;
         icon.querySelectorAll('path').forEach((path) => {
-            path.style.setProperty('fill', 'none', 'important');
-            path.style.setProperty('stroke', 'currentColor', 'important');
-            path.style.setProperty('stroke-width', '2', 'important');
-            path.style.setProperty('stroke-linecap', 'round', 'important');
-            path.style.setProperty('stroke-linejoin', 'round', 'important');
+            path.style.setProperty('fill', 'currentColor', 'important');
+            path.style.setProperty('stroke', 'none', 'important');
         });
     }
 
@@ -3122,9 +3113,8 @@
         linkButton.title = '複製這則貼文連結（去追蹤碼）';
         linkButton.setAttribute('aria-label', '複製這則貼文連結（去追蹤碼）');
         linkButton.innerHTML = `
-            <svg aria-hidden="true" viewBox="0 0 24 24">
-                <rect x="8" y="8" width="13" height="13" rx="2"></rect>
-                <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"></path>
+            <svg aria-hidden="true" viewBox="0 0 512 509.84" preserveAspectRatio="xMidYMid meet">
+                <path fill="currentColor" stroke="none" fill-rule="nonzero" d="${CLEAN_LINK_ICON_PATH}"></path>
             </svg>
         `;
         linkButton.addEventListener('click', (event) => {

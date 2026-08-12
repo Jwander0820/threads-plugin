@@ -35,3 +35,6 @@ coverage/
 *.local.user.js
 *.test.user.js
 *.bak
+
+# Local design assets (the icon is embedded directly in the userscript)
+assets/
