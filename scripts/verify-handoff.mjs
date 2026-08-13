@@ -82,8 +82,6 @@ for (const required of [
     'dist/chrome-extension/content.js',
     `artifacts/threads-plugin-chrome-${version}.zip`,
     `artifacts/threads-plugin-chrome-${version}.zip.sha256`,
-    'docs/store-assets/screenshot-01.png',
-    'docs/store-assets/small-promo-440x280.png',
     'HANDOFF_CONTENTS.sha256'
 ]) {
     if (!entries.has(required)) throw new Error(`project handoff missing required entry: ${required}`);

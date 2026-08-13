@@ -39,3 +39,7 @@ coverage/
 
 # Local planning/reference assets not shipped by either target
 assets/
+AGENT.md
+
+# Provisional Chrome Web Store visuals; commit only after final design review
+docs/store-assets/

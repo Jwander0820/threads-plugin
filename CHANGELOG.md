@@ -23,6 +23,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Refocused `README.md` on user-facing features, installation, usage, and privacy, while keeping detailed engineering guidance outside the public README.
 - Moved the existing feature runtime under `src/shared` with explicit `start`, `stop`, option update, and captured-media ingestion lifecycle methods.
 - Made `package.json` the single product-version source and centralized website/permission allowlists.
 - Chrome page processing now remains dormant until consent and does not start on login, account, challenge, direct-message, OAuth, security, privacy, or settings routes.

@@ -10,7 +10,7 @@ const RELEASE_MODE = process.argv.includes('--release');
 const STORE_ASSET_DIR = resolve(REPOSITORY_ROOT, 'docs', 'store-assets');
 
 const required = [
-    ['README.md', ['Chrome Extension 本機安裝', 'Userscript 本機安裝', 'npm.cmd run verify', 'downloads', 'storage', 'scripting']],
+    ['README.md', ['Threads Plugin 是一套 Threads 貼文內容工具', 'Tampermonkey', 'Chrome Extension', 'npm.cmd run verify', 'PRIVACY.md']],
     ['docs/ARCHITECTURE.md', ['Scope and source-of-truth rule', 'Chrome execution worlds', 'Consent and data lifecycle', 'Build, test, and release flow', 'Security and maintenance invariants']],
     ['docs/TEST_MATRIX.md', ['Automated evidence', 'Security invariant evidence (S1–S18)', 'Local browser fixture evidence', 'Cross-platform functional matrix', 'Chrome privacy and lifecycle matrix', 'Store and production matrix', 'Completion boundary']],
     ['PRIVACY.md', ['Data handled', 'Necessary destinations and sharing', 'operating-system clipboard', 'User control', 'Chrome Web Store Limited Use', 'Limited Use requirements']],
