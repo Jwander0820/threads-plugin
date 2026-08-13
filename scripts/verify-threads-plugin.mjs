@@ -1,40 +1,20 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+
+import {
+    THREADS_MATCHES,
+    USERSCRIPT_CONNECTS,
+    USERSCRIPT_GRANTS
+} from '../config/targets.mjs';
 
 const MODULE_FILENAME = fileURLToPath(import.meta.url);
 const DEFAULT_ROOT_DIR = resolve(dirname(MODULE_FILENAME), '..');
 
 const EXPECTED_ALLOWLISTS = Object.freeze({
-    grant: Object.freeze([
-        'GM_addStyle',
-        'GM_download',
-        'GM_xmlhttpRequest',
-        'GM_getValue',
-        'GM_setValue',
-        'GM_registerMenuCommand',
-        'GM_unregisterMenuCommand',
-        'GM_setClipboard',
-        'unsafeWindow'
-    ]),
-    connect: Object.freeze([
-        'threads.com',
-        'www.threads.com',
-        'threads.net',
-        'www.threads.net',
-        'instagram.com',
-        '*.instagram.com',
-        'cdninstagram.com',
-        '*.cdninstagram.com',
-        'fbcdn.net',
-        '*.fbcdn.net'
-    ]),
-    match: Object.freeze([
-        'https://www.threads.com/*',
-        'https://threads.com/*',
-        'https://www.threads.net/*',
-        'https://threads.net/*'
-    ])
+    grant: USERSCRIPT_GRANTS,
+    connect: USERSCRIPT_CONNECTS,
+    match: THREADS_MATCHES
 });
 
 function getRootDir(argv) {
@@ -106,7 +86,7 @@ function validateVersion(directives, packageVersion) {
 
 function validateLoadedLog(runtimeSource, packageVersion) {
     const loadedVersions = [];
-    const loadedLogPattern = /^\s*log\(\s*(['"`])v([^'"`\r\n]+) loaded\1\s*\);\s*$/gm;
+    const loadedLogPattern = /(?:\blog|console\.log)\([^\r\n]*?(['"`])v([^'"`\r\n]+) loaded\1[^\r\n]*?\);/g;
     for (const match of runtimeSource.matchAll(loadedLogPattern)) loadedVersions.push(match[2]);
 
     return {
@@ -115,7 +95,15 @@ function validateLoadedLog(runtimeSource, packageVersion) {
     };
 }
 
-function buildChecks(source, packageVersion, metadata) {
+function readSharedSource(repositoryRoot) {
+    const sharedRoot = resolve(repositoryRoot, 'src', 'shared');
+    return readdirSync(sharedRoot, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && entry.name.endsWith('.js'))
+        .map((entry) => readFileSync(resolve(sharedRoot, entry.name), 'utf8'))
+        .join('\n');
+}
+
+function buildChecks(source, packageVersion, metadata, repositoryRoot) {
     const { directives, runtimeSource } = metadata;
     const grantAllowlist = validateAllowlist(directives.get('grant') || [], EXPECTED_ALLOWLISTS.grant);
     const connectAllowlist = validateAllowlist(directives.get('connect') || [], EXPECTED_ALLOWLISTS.connect);
@@ -137,19 +125,24 @@ function buildChecks(source, packageVersion, metadata) {
         ['metadata @grant allowlist', grantAllowlist.passed, grantAllowlist.detail],
         ['metadata @connect allowlist', connectAllowlist.passed, connectAllowlist.detail],
         ['metadata @match allowlist', matchAllowlist.passed, matchAllowlist.detail],
+        ['metadata has no @require', !(directives.get('require') || []).length],
+        ['generated warning follows metadata', runtimeSource.trimStart().startsWith('// GENERATED FILE. DO NOT EDIT DIRECTLY.\n// Source files are under /src.')],
+        ['strict-mode runtime', /\/\/ Source files are under \/src\.\r?\n'use strict';/.test(runtimeSource)],
         ['single media download support', /GM_download/.test(source) && /downloadItem/.test(source)],
         ['batch media modal support', /ensurePostMediaModal/.test(source) && /downloadModalItems/.test(source)],
         ['copy post text support', /copyPostBlockText/.test(source) && /GM_setClipboard/.test(source)],
         ['direct clean-link support', /copyPostBlockCleanLink/.test(source) && /buildCleanThreadsPostUrl/.test(source)],
         ['native share clean-link support', /CLEAN_LINK_MENU_CLASS/.test(source) && /closeNativeShareMenu/.test(source)],
         ['shared clean-link icon path', /CLEAN_LINK_ICON_PATH/.test(source) && /M245\.14 352\.14/.test(source) && /createLinkToolButton[\s\S]*CLEAN_LINK_ICON_PATH/.test(source) && /replaceCleanLinkMenuIcon[\s\S]*CLEAN_LINK_ICON_PATH/.test(source)],
-        ['native share icon style isolation', /path\.style\.setProperty\('fill', 'currentColor', 'important'\)/.test(source) && /path\.style\.setProperty\('stroke', 'none', 'important'\)/.test(source)],
-        ['native share concise clean-link label', /labelNode\.nodeValue = '原始連結'/.test(source) && /複製去除追蹤碼的連結/.test(source)],
+        ['native share icon style isolation', /path\.style\.setProperty\(["']fill["'],\s*["']currentColor["'],\s*["']important["']\)/.test(source) && /path\.style\.setProperty\(["']stroke["'],\s*["']none["'],\s*["']important["']\)/.test(source)],
+        ['native share concise clean-link label', /labelNode\.nodeValue = ["']原始連結["']/.test(source) && /複製去除追蹤碼的連結/.test(source)],
         ['native share outer-control targeting', /findShareSvgInControl/.test(source) && /pathControlSvg/.test(source)],
         ['quoted-post targeting support', /findBestPostInfoInNode/.test(source) && /findPostBlockRootFromShareButton/.test(source)],
         ['post text cleanup support', /cleanPostTextFragment/.test(source)],
-        ['inline script scan guarded by WeakSet', /scannedScripts:\s*new WeakSet/.test(source) && /scanInlineScriptsForVideoUrls/.test(source)],
-        ['plugin DOM mutation ignored', /new MutationObserver/.test(source) && /POST_TOOL_CLASS/.test(source) && /COPY_TOOL_CLASS/.test(source) && /LINK_TOOL_CLASS/.test(source)],
+        ['inline script scan guarded by WeakSet', /scannedScripts:\s*(?:\/\*[^*]*\*\/\s*)?new WeakSet/.test(source) && /scanInlineScriptsForVideoUrls/.test(source)],
+        ['plugin DOM mutation ignored', /new (?:window\.)?MutationObserver/.test(source) && /POST_TOOL_CLASS/.test(source) && /COPY_TOOL_CLASS/.test(source) && /LINK_TOOL_CLASS/.test(source)],
+        ['async runtime lifecycle', /createThreadsRuntime/.test(source) && /async function start/.test(source) && /async function stop/.test(source) && /async function updateOptions/.test(source)],
+        ['shared code excludes privileged namespaces', !/(?:\bGM_|\bunsafeWindow\b|\bchrome\.)/.test(readSharedSource(repositoryRoot))],
         ['no obvious tracking or dynamic code', !/(sendBeacon|document\.cookie|localStorage|sessionStorage|analytics|tracking|eval\(|new Function)/.test(runtimeSource)]
     ];
 }
@@ -174,7 +167,7 @@ export function verifyRepository(repositoryRoot, output = {}) {
         return { passed: false, failed: 1, total: 0 };
     }
 
-    const checks = buildChecks(source, packageVersion, metadata);
+    const checks = buildChecks(source, packageVersion, metadata, repositoryRoot);
     let failed = 0;
 
     for (const [label, passed, detail] of checks) {

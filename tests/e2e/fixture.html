@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Threads Plugin E2E Fixture</title>
+  <style>
+    body { margin: 0; min-height: 100vh; font: 16px/1.5 system-ui; background: #111; color: #eee; }
+    main { width: min(680px, calc(100% - 32px)); margin: 60px auto; }
+    article { position: relative; border: 1px solid #444; border-radius: 18px; padding: 20px; background: #1d1d1d; }
+    article img { display: block; width: 100%; height: 420px; object-fit: cover; border-radius: 12px; }
+    a { color: inherit; }
+  </style>
+  <script src="/chrome-mock.js"></script>
+</head>
+<body>
+  <main>
+    <nav aria-label="E2E routes">
+      <button id="navigate-sensitive" type="button">Navigate sensitive</button>
+      <button id="navigate-safe" type="button">Navigate safe</button>
+    </nav>
+    <article data-e2e-post>
+      <a href="https://www.threads.com/@fixture_author/post/ABC123">@fixture_author</a>
+      <time datetime="2026-08-12T08:00:00Z">2026-08-12</time>
+      <p>Fixture post text for copy and clean-link parity.</p>
+      <img src="https://scontent.cdninstagram.com/fixture-photo.jpg" alt="fixture media">
+    </article>
+  </main>
+  <script src="/content.js"></script>
+  <script src="/navigation.js"></script>
+</body>
+</html>

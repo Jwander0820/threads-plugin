@@ -1,115 +1,181 @@
 # Threads Plugin
 
-Threads Plugin 是一支用於 Threads 網頁版的 userscript，提供圖片與影片下載、批次資源選擇、貼文文字複製，以及去除追蹤碼的連結複製功能。
+Threads Plugin 是一套由同一份 shared source 產生的雙平台工具：
+
+- Tampermonkey userscript：`threads-plugin.user.js`
+- Manifest V3 Chrome Extension：`dist/chrome-extension/`
+
+它在 Threads 貼文旁提供單張圖片／影片下載、整篇媒體選擇與批次下載、複製貼文文字、複製去追蹤參數連結，以及 Threads 原生分享選單內的乾淨連結功能。
 
 ## 功能
 
-- 下載單張圖片。
-- 下載單支影片。
-- 在貼文詳情頁批次選擇並下載圖片與影片；預設不勾選資源，可手動挑選或直接下載全部。
-- 複製每個貼文 block 的本文內容。
-- 複製去除追蹤碼後的貼文連結。
-- 在 Threads 原生分享選單中加入「複製連結（去追蹤碼）」。
-- 支援引用貼文辨識，避免外層與內層貼文互相抓錯。
-- 清理長文、多節點、翻譯文字、tag 與輪播計數等非本文內容。
+- 在 feed、profile、detail、reply 與引用貼文中下載圖片、影片或選定的輪播媒體。
+- 複製清理 UI 雜訊後的貼文文字，以及移除已知追蹤參數的直接連結。
+- 在 Threads 原生分享選單旁提供乾淨連結動作，並以 route/post identity 防止跨貼文借用資料。
+- Chrome 版另提供首次揭露、即時撤銷與獨立 opt-in 的 allowlisted network capture。
 
 ## 安裝
 
-1. 安裝 userscript 管理器，例如 Tampermonkey、Violentmonkey 或 FireMonkey。
-2. 開啟 GitHub Raw URL：
+### Chrome Web Store
 
-   ```text
-   https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/threads-plugin.user.js
+尚未上架；目前沒有 Chrome Web Store 安裝連結。production candidate 僅供本機驗收，送審與發布需另行授權。
+
+### Tampermonkey
+
+請依下方 Userscript 本機安裝步驟匯入 generated root script。正式 Raw URL 維持不變。
+
+### Manual Chrome installation
+
+請依下方 Chrome Extension 本機安裝步驟，從同一 source 產生 unpacked directory 或 production ZIP。
+
+## 隱私預設
+
+Chrome Extension 第一次進入 Threads 時保持休眠，只顯示內容處理揭露。使用者同意前，不啟動 shared runtime、不掃描貼文 DOM，也不攔截網路回應。拒絕後持續休眠且不重複打擾；可在設定頁重新同意或撤銷。
+
+進階網路回應擷取是第二層、預設關閉的 opt-in。只有使用者另行確認後，service worker 才動態註冊 packaged `world: "MAIN"` script。關閉或撤銷時，service worker 會在 unregister 未來注入的同時，權威地撤銷每個已開啟分頁目前 document 內的 MAIN controller，立即還原 fetch/XHR wrapper 並清除 bridge listener。該 controller 在這個 document 內會永久鎖定，頁面程式或再次注入都無法重新啟動。
+
+若在同一個仍開啟的分頁重新啟用進階擷取，必須重新載入分頁（建立新 document）後才會生效；頁面內容處理與 DOM 工具仍依一般 consent 狀態運作。
+
+完整資料處理說明見 [PRIVACY.md](PRIVACY.md)，Chrome Web Store 權限理由見 [docs/permissions-justification.md](docs/permissions-justification.md)。
+
+## Chrome Extension 本機安裝
+
+1. 安裝 Node.js 24（專案目前驗證版本為 24.18.0）。
+2. 在 repo 執行：
+
+   ```powershell
+   npm.cmd ci
+   npm.cmd run build
    ```
 
-3. 依照 userscript 管理器提示安裝或更新腳本。
-4. 重新整理 Threads 網頁版。
+3. 開啟 `chrome://extensions`，開啟「開發人員模式」。
+4. 選擇「載入未封裝項目」，指定 `dist/chrome-extension`。
+5. 開啟任一支援的 Threads origin，完成首次揭露。
 
-從上述 GitHub Raw URL 安裝時，Tampermonkey 等 userscript 管理器會依照腳本內的 `@updateURL` 與 `@downloadURL` 定期檢查更新。發布新版時必須同步提高 `@version`，管理器才會辨識為新版本。從 Greasy Fork 安裝的版本則由 Greasy Fork 提供更新來源。
+正式上架 ZIP 由 `npm.cmd run package:extension` 產生；ZIP 根目錄直接是 `manifest.json`，不是多包一層資料夾。
 
-## 支援網站
+## Userscript 本機安裝
+
+1. 安裝 Tampermonkey。
+2. 執行 `npm.cmd run build:userscript`。
+3. 將 repo 根目錄的 `threads-plugin.user.js` 匯入 Tampermonkey。
+
+目前 userscript 的公開更新 URL 仍指向：
+
+```text
+https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/threads-plugin.user.js
+```
+
+Git commit／push、GitHub Release 與 Greasy Fork 更新是彼此獨立的發布動作，需分別確認後執行。
+
+## 支援的網站
 
 - `https://www.threads.com/*`
 - `https://threads.com/*`
 - `https://www.threads.net/*`
 - `https://threads.net/*`
 
-## 權限說明
+登入、帳號、驗證、私訊、安全、隱私及設定等敏感路徑不啟動 Chrome 頁面 runtime，也不進行網路回應擷取。
 
-本腳本需要以下 userscript 權限：
+## 開發與驗證
 
-- `GM_addStyle`：插入下載、複製按鈕與 modal 需要的樣式。
-- `GM_download`：下載圖片與影片。
-- `GM_xmlhttpRequest`：通過媒體 URL 安全檢查後，讀取允許網域上的 Threads、Instagram、CDN Instagram 與 FBCDN 媒體資源。
-- `GM_getValue` / `GM_setValue`：儲存本機腳本設定。
-- `GM_registerMenuCommand` / `GM_unregisterMenuCommand`：提供 userscript 管理器選單設定。
-- `GM_setClipboard`：在使用者主動點擊時複製文字或連結。
-- `unsafeWindow`：掛載必要的網頁環境監聽，以辨識媒體與分享選單。
+```powershell
+npm.cmd ci
+npm.cmd run verify
+npm.cmd run test:e2e
+npm.cmd audit --audit-level=high
+npm.cmd run package:extension
+npm.cmd run verify:package
+```
 
-`@connect` 已限制於 Threads、Instagram、CDN Instagram 與 FBCDN 相關網域，不使用萬用 `@connect *`。
+`npm.cmd run verify` 會：
+
+- 從 `src/shared`、`src/userscript`、`src/chrome` 重新建置雙平台產物。
+- 驗證 userscript metadata allowlist、版本同步、無 `@require`。
+- 驗證 MV3 manifest、權限／host allowlist、ISOLATED disclosure gate、opt-in MAIN registration、service worker message policy、無遠端程式碼。
+- 執行單元、契約、回歸與安全對抗測試。
+- 確認生成的 userscript 與 extension manifest 沒有 stale。
+
+若 Windows 的受限沙箱禁止 Node test runner／esbuild 建立子程序，可用 `node --test --test-isolation=none` 驗證同一套測試；正式 release checkpoint 仍應在一般本機 shell 執行原始 `npm.cmd run verify`。
+
+`npm.cmd run test:e2e` 是 built-extension 契約／lifecycle suite；它驗證 fixture 指向目前 packaged content bundle，並涵蓋 disclosure、content lifecycle、MAIN STOP 與 service-worker download boundary。真實 MV3 安裝、worker termination/restart 與 live Threads 仍依人工清單驗收，不以此命令取代。
+
+`npm.cmd run verify:docs` 會驗證政策內容、icon 尺寸與 Store release gate 狀態；尚需登入、人工簽核或外部發布授權的項目會明確顯示為 `PENDING`，不會讓日常程式驗證失敗。只有準備送審時才執行：
+
+```powershell
+npm.cmd run verify:docs:release
+```
+
+Release 模式會因未公開的隱私政策 URL、未完成的人工驗收／sign-off 或缺少 Store screenshot 而失敗；已產出的 440×280 small promotional tile 仍會被尺寸與 freshness gate 驗證。
+
+`npm.cmd run build:store-assets` 可重建暫定的 `docs/store-assets/small-promo-440x280.png`。正式 icon、宣傳圖與 Store screenshot 可於送審前替換；最終 screenshot 必須取自真實已安裝、已登入 Threads 的驗收畫面，不以 mock fixture 代替。
+
+整體元件邊界與 lifecycle 見 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，自動化／人工證據總表見 [docs/TEST_MATRIX.md](docs/TEST_MATRIX.md)，實際瀏覽器逐項驗收表見 [docs/manual-test-checklist.md](docs/manual-test-checklist.md)，高階主管級安全與上架 Go/No-Go 判定見 [docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md)。
+
+## 跨電腦移交
+
+Git 中已提交的版本可直接 clone。若需要傳遞尚未提交的完整工作目錄，或建立可離線驗證的 source snapshot，可產生經逐檔校驗的專案移交包：
+
+```powershell
+npm.cmd run package:handoff
+npm.cmd run verify:handoff
+```
+
+輸出為 `artifacts/threads-plugin-<version>-project-handoff.zip` 及其 SHA-256 sidecar。移交包含 source、文件、測試、兩平台生成物與 Chrome production ZIP；不含 `.git`、`node_modules`、舊 manual extraction 或帳號資料。
+
+
+## 專案結構
+
+```text
+config/                 權限、網站與 userscript allowlist 單一來源
+src/shared/             平台無關的 runtime、policy、models
+src/userscript/         userscript adapter 與 bootstrap
+src/chrome/             Chrome content、MAIN capture、service worker、options
+extension/              manifest template、HTML/CSS、原創圖示
+scripts/                build、verify、package 工具
+tests/                  shared/userscript/Chrome/security/E2E fixtures
+docs/                   架構、驗證、安全與 Store 草稿文件
+extension/              Chrome manifest／HTML／CSS／icon source（會提交）
+dist/chrome-extension/  生成的 unpacked extension（git ignored）
+artifacts/               生成套件、checksum 與本機驗收副本（git ignored）
+assets/                  本機規格／移交參考資料（git ignored）
+```
+
+## 權限摘要
+
+Chrome Extension 只宣告：
+
+- `downloads`：由 service worker 下載通過 allowlist 驗證的媒體 URL。
+- `storage`：儲存使用者選項與 consent state。
+- `scripting`：只為使用者另行 opt-in 的 packaged MAIN-world capture 動態註冊／取消註冊。
+- 四個精確 Threads host patterns：限制 content script 與動態 MAIN script 的作用範圍。
+
+不使用 `tabs`、`activeTab`、`webRequest`、`webRequestBlocking`、`cookies`、`nativeMessaging`、遠端 JavaScript、`eval` 或 `new Function`。
 
 ## 隱私
 
-- 不會使用 `sendBeacon`。
-- 不會讀取 `document.cookie`。
-- 不會使用 `localStorage` 或 `sessionStorage`。
-- 不含 analytics 或 tracking。
-- 不使用 `eval` 或 `new Function`。
-- 不會遠端載入外部 JavaScript。
-- 只有在使用者主動點擊複製功能時，才會把貼文文字或連結寫入剪貼簿。
-- `GM_getValue` / `GM_setValue` 僅用於儲存腳本設定。
-- 在非敏感頁面上，腳本會讀取畫面中既有的媒體元素，以及含明確媒體欄位、大小不超過 2 MiB 的內嵌 JSON hydration script；只解析結構化的貼文／媒體欄位，不以全文字串距離猜測貼文歸屬，也不會把內容傳送出去。
-- 為了從 Threads 回應中辨識貼文媒體，腳本會觀察頁面既有的 `fetch` / XHR；只處理已知 Threads endpoint／operation、明確的 JSON 或文字 MIME 與有限大小的回應，不掃描私訊、登入、帳號或設定頁面的敏感回應，也不會把回應另行傳送到外部服務。
-- 公開 CDN 媒體的 blob 下載使用 `anonymous: true`，不附帶 Threads／Instagram cookies；下載失敗時不會悄悄改成帶登入憑證的請求。
-- 開啟媒體下載視窗時，若 Threads 沒有提供影片 poster，腳本會以已通過安全檢查的影片 URL 載入少量 metadata／首幀作為縮圖，並依原始尺寸呈現直向、橫向或方形比例；不會自動播放影片。
+擴充功能只為使用者要求的 Threads 貼文匯出功能在本機處理目前頁面內容；不設開發者後端，不使用 analytics／廣告／追蹤，也不出售資料。完整 retention、第三方媒體請求、剪貼簿與撤銷說明見 [PRIVACY.md](PRIVACY.md)。
 
-## 已知限制
+## Build
 
-- Threads 介面與 DOM 結構更新時，按鈕定位、貼文辨識或媒體抓取可能需要跟進調整。
-- 若圖片或影片下載失敗，可能是 Threads 新增了 CDN 網域，需要更新 `@connect`。
-- 受瀏覽器、userscript 管理器與來源站台限制影響，部分媒體可能無法直接下載。
-- 公開 CDN 的 `anonymous: true` 行為仍需在真實 Tampermonkey 與 Threads CDN 上驗證；自動化測試會驗證請求設定、final URL／MIME、進度感知 watchdog 與永不 callback 的收斂行為，但不能取代實際管理器與 CDN 傳輸測試。
-- `GM_download` 路徑會在呼叫前驗證原始 URL，但重新導向後的最終 URL 與憑證政策由實際 userscript 管理器控制；anonymous blob fallback 會另行驗證 final URL 與 MIME。這項差異需列入真實 Tampermonkey 驗證，不能假設所有管理器行為相同。
-- 私人或存取受限媒體可能確實需要登入 cookies，這是待實機確認的例外需求。確認前腳本不自動發送帶 cookies 的跨網域下載；若日後必須支援，應將例外限縮到明確 endpoint／網域，另加測試並在此揭露。
+`npm.cmd run build` 從 `src` 產生 root userscript、unpacked Chrome Extension 與 Store promo；`npm.cmd run package:extension` 另產生固定排序／時間戳的 production ZIP 與 checksum。
 
-## 開發驗證
+## Test
 
-使用 Node.js 檢查 userscript 語法：
+`npm.cmd run verify` 是本機完整自動化 gate；`npm.cmd run test:e2e` 是 built-output 契約與 Chrome lifecycle 子集；[docs/TEST_MATRIX.md](docs/TEST_MATRIX.md) 區分自動證據、fixture 證據與仍待真實瀏覽器完成的項目。
 
-```powershell
-node --check .\threads-plugin.user.js
-```
+## Release
 
-執行靜態核心功能與 metadata 檢查；verifier 會從 `package.json` 讀取版本，核對 `@version` 與 loaded log，並精確比對 `@grant`、`@connect`、`@match` allowlist：
+送審前依序執行 `npm.cmd ci`、`npm.cmd run verify`、`npm.cmd run test:e2e`、`npm.cmd audit --audit-level=high`、`npm.cmd run package:extension`、`npm.cmd run verify:package` 與 `npm.cmd run verify:docs:release`。最後一個 gate 只有在公開 privacy URL、真實 Store screenshot、30 項人工驗收與七個 sign-off 欄位全完成時才會通過。
 
-```powershell
-node .\scripts\verify-threads-plugin.mjs
-```
+## Known Limitations
 
-執行媒體 URL、可信使用者操作、貼文／引用媒體隔離、SPA route、下載 watchdog／MIME、批次鎖與 metadata allowlist 回歸測試：
+- 停用或撤銷進階擷取會永久鎖定目前 document 的 MAIN controller；在同一既開分頁重新啟用後，必須 reload 或開啟新 document 才能再次擷取網路回應。
+- 私密或需額外權限、登入／DRM 繞過才能取得的媒體不在支援範圍。
+- 無可辨識媒體副檔名或 MIME 的簽名 endpoint 會保守拒絕。
+- Anonymous blob fallback 可能無法取得需要 authenticated cookies 的媒體；userscript manager 對 redirect／credential 的行為仍須於發布候選版本人工驗證。
+- Chrome Web Store 審核結果不可保證；本 repo 只產生未發布候選產物。
 
-```powershell
-node --test
-```
+## License
 
-也可以一次執行全部驗證：
-
-```powershell
-npm.cmd run verify
-```
-
-上架前建議手動確認：
-
-- Threads 主文單張圖片下載。
-- Threads 主文影片下載。
-- 批次下載 modal。
-- 複製本文。
-- 複製無追蹤碼連結。
-- 分享選單複製後是否自動關閉。
-- 引用貼文內層文章是否可正常複製與下載。
-
-## 發布維護建議
-
-- 版本異動與安全／相容性說明請見 [CHANGELOG.md](CHANGELOG.md)。
-- 建議發布前同步核對 `package.json`、userscript `@version`、loaded log、Git tag、GitHub Release 與 Greasy Fork 版本及內容。
-- 驗證與修復流程不應自動 commit、push、建立 tag／Release 或更新 Greasy Fork；發布動作應由維護者另行人工確認。
+[MIT](LICENSE)

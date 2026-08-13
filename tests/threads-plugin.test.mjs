@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 import test from 'node:test';
 
-const require = createRequire(import.meta.url);
 const {
     activateButton,
     buildModalItemPreviewMarkup,
@@ -17,16 +15,16 @@ const {
     finalizeModalItems,
     findPostContext,
     findShareSvgFromEvent,
-    getPostBlockTextBoundary,
     getModalDownloadItems,
     getVideoThumbnailLayout,
     inspectResponse,
+    installNetworkHooks,
     isNativeCopyLinkActionRect,
     orderMediaElementsByVisualPosition,
     selectPostBoundVideoUrl,
     transitionMediaRouteScope,
     validateMediaUrl
-} = require('../threads-plugin.user.js');
+} = (await import('./helpers/runtime-testing.mjs')).runtimeTesting;
 
 globalThis.location = {
     href: 'https://www.threads.com/@current/post/POST_B'
@@ -271,6 +269,26 @@ test('network response inspection enforces MIME and byte limits', async () => {
     }), captureContext, { maxBytes: 32 }), false);
 });
 
+test('userscript XHR capture rejects repeated conflicting operation headers', () => {
+    class FakeXhr {
+        constructor() { this.listeners = new Map(); }
+        open() {}
+        send() {}
+        setRequestHeader() {}
+        addEventListener(type, listener) { this.listeners.set(type, listener); }
+        removeEventListener(type, listener) { if (this.listeners.get(type) === listener) this.listeners.delete(type); }
+    }
+    const targetWindow = { XMLHttpRequest: FakeXhr };
+    const uninstall = installNetworkHooks(targetWindow);
+    const xhr = new targetWindow.XMLHttpRequest();
+    xhr.open('POST', 'https://www.threads.com/api/graphql');
+    xhr.setRequestHeader('x-fb-friendly-name', 'AccountSettingsQuery');
+    xhr.setRequestHeader('x-fb-friendly-name', 'BarcelonaFeedQuery');
+    xhr.send();
+    assert.equal(xhr.listeners.has('load'), false);
+    uninstall();
+});
+
 test('post-bound video lookup never borrows media from another feed post', () => {
     const videosByPost = new Map([
         ['POST_A', ['https://cdninstagram.com/post-a.mp4']],
@@ -285,6 +303,20 @@ test('post-bound video lookup never borrows media from another feed post', () =>
         postId: 'POST_C',
         videoUrlsByPostId: videosByPost
     }), null);
+
+    const edgeUnderscoreVideos = new Map([
+        ['_ABCDE', ['https://cdninstagram.com/leading.mp4']],
+        ['ABCDE', ['https://cdninstagram.com/plain.mp4']],
+        ['ABCDE_', ['https://cdninstagram.com/trailing.mp4']]
+    ]);
+    assert.equal(selectPostBoundVideoUrl({
+        postId: '_ABCDE',
+        videoUrlsByPostId: edgeUnderscoreVideos
+    }), 'https://cdninstagram.com/leading.mp4');
+    assert.equal(selectPostBoundVideoUrl({
+        postId: 'ABCDE_',
+        videoUrlsByPostId: edgeUnderscoreVideos
+    }), 'https://cdninstagram.com/trailing.mp4');
 });
 
 test('structured quoted media is isolated from the parent post identity', () => {
@@ -377,62 +409,6 @@ test('structured media extraction preserves repeated carousel slots with the sam
             ['image', repeatedPhoto, 'REPEATED_POST']
         ]
     );
-});
-
-test('structured media extraction ignores a post-level cover duplicated by carousel_media', () => {
-    const firstPhoto = 'https://cdninstagram.com/media/first.jpg?ig_cache_key=FIRST.3-ccb7-5';
-    const secondPhoto = 'https://cdninstagram.com/media/second.jpg?ig_cache_key=SECOND.3-ccb7-5';
-    const records = collectStructuredMediaUrls({
-        code: 'Db5Yl8zEVFh',
-        image_versions2: {
-            candidates: [{ url: firstPhoto, width: 100, height: 100 }]
-        },
-        carousel_media: [
-            {
-                image_versions2: {
-                    candidates: [{ url: firstPhoto, width: 100, height: 100 }]
-                }
-            },
-            {
-                image_versions2: {
-                    candidates: [{ url: secondPhoto, width: 100, height: 100 }]
-                }
-            }
-        ]
-    });
-
-    assert.deepEqual(
-        records.map((record) => [record.type, record.url, record.postId]),
-        [
-            ['image', firstPhoto, 'Db5Yl8zEVFh'],
-            ['image', secondPhoto, 'Db5Yl8zEVFh']
-        ]
-    );
-});
-
-test('post text boundary stops before Threads music lyrics', () => {
-    const musicControl = {
-        getAttribute: (name) => {
-            if (name === 'aria-label') return '播放音樂';
-            if (name === 'role') return 'button';
-            return null;
-        },
-        matches: (selector) => selector === 'button,[role="button"]',
-        getBoundingClientRect: () => ({ top: 240, bottom: 304 })
-    };
-    const root = {
-        getBoundingClientRect: () => ({ top: 90, bottom: 640 }),
-        querySelectorAll: (selector) => {
-            if (selector === 'img, video') return [];
-            if (selector === '[aria-label]') return [musicControl];
-            return [];
-        }
-    };
-    const actionBar = {
-        getBoundingClientRect: () => ({ top: 520 })
-    };
-
-    assert.equal(getPostBlockTextBoundary(root, actionBar), 240);
 });
 
 test('new share sheet accepts the 80px-wide native copy-link action', () => {

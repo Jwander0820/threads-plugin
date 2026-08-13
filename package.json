@@ -1,9 +1,30 @@
 {
   "name": "threads-plugin",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "private": true,
   "scripts": {
+    "build": "node scripts/build-all.mjs",
+    "build:userscript": "node scripts/build-userscript.mjs",
+    "build:extension": "node scripts/build-extension.mjs",
+    "build:store-assets": "node scripts/build-store-assets.mjs",
+    "package:extension": "node scripts/package-extension.mjs",
+    "package:handoff": "node scripts/package-handoff.mjs",
     "test": "node --test",
-    "verify": "node --check ./threads-plugin.user.js && node ./scripts/verify-threads-plugin.mjs && node --test"
+    "test:e2e": "node --test --test-isolation=none tests/chrome/content-entry.test.mjs tests/chrome/disclosure.test.mjs tests/chrome/main-capture-runtime.test.mjs tests/chrome/main-world-capture.test.mjs tests/chrome/download-handler.test.mjs tests/chrome/service-worker.test.mjs tests/e2e/built-extension.test.mjs",
+    "verify:userscript": "node --check ./threads-plugin.user.js && node ./scripts/verify-threads-plugin.mjs",
+    "verify:extension": "node scripts/verify-extension.mjs",
+    "verify:docs": "node scripts/verify-docs.mjs",
+    "verify:docs:release": "node scripts/verify-docs.mjs --release",
+    "verify:package": "node scripts/verify-package.mjs",
+    "verify:generated": "node scripts/verify-generated.mjs",
+    "verify:handoff": "node scripts/verify-handoff.mjs",
+    "verify": "npm run build && npm run verify:userscript && npm run verify:extension && npm run verify:docs && npm run test && npm run verify:generated",
+    "test:pipeline": "node --test --test-isolation=none tests/package-extension.test.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.9",
+    "sharp": "^0.35.3",
+    "yauzl": "^3.4.0",
+    "yazl": "^3.3.1"
   }
 }

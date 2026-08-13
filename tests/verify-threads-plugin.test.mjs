@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +17,11 @@ function verifyFixture(t, mutateSource) {
     t.after(() => rmSync(fixtureRoot, { recursive: true, force: true }));
     writeFileSync(resolve(fixtureRoot, 'threads-plugin.user.js'), mutateSource(BASE_SOURCE), 'utf8');
     writeFileSync(resolve(fixtureRoot, 'package.json'), BASE_PACKAGE, 'utf8');
+    cpSync(
+        resolve(REPOSITORY_ROOT, 'src', 'shared'),
+        resolve(fixtureRoot, 'src', 'shared'),
+        { recursive: true }
+    );
     const errors = [];
     const result = verifyRepository(fixtureRoot, {
         log() {},
@@ -64,7 +69,7 @@ test('verifier rejects every extra privileged metadata directive', async (t) => 
 test('verifier rejects userscript and runtime versions that drift from package.json', (t) => {
     const { result, errors } = verifyFixture(t, (source) => source
         .replace(/^\/\/ @version\s+\S+/m, '// @version      0.0.0')
-        .replace(/log\('v[^']+ loaded'\);/, "log('v0.0.0 loaded');"));
+        .replace(/(["'])v[^"']+ loaded\1/, "'v0.0.0 loaded'"));
 
     assert.equal(result.passed, false);
     assert.equal(errors.some((message) => message.includes('metadata/package version')), true);

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Threads Plugin 設定</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">THREADS PLUGIN</p>
+      <h1>功能與隱私設定</h1>
+      <p>所有處理都在你的瀏覽器內完成。擴充功能不會把貼文內容或媒體 URL 傳送到開發者伺服器。</p>
+    </header>
+
+    <section aria-labelledby="consent-heading">
+      <h2 id="consent-heading">內容處理同意</h2>
+      <p id="consent-status" class="status" role="status">讀取中…</p>
+      <p>啟用後，Threads Plugin 才會讀取 Threads 頁面的貼文文字、連結及媒體資訊，並在頁面加入功能按鈕。</p>
+      <div class="actions">
+        <button id="enable-page-processing" type="button">同意並啟用</button>
+        <button id="revoke-consent" class="secondary" type="button">撤銷同意</button>
+      </div>
+    </section>
+
+    <form id="options-form">
+      <section aria-labelledby="feature-heading">
+        <h2 id="feature-heading">頁面功能</h2>
+        <label class="toggle">
+          <input id="enable-post-media-picker" type="checkbox">
+          <span>顯示貼文批次媒體選擇器</span>
+        </label>
+        <label class="toggle">
+          <input id="network-capture-enabled" type="checkbox">
+          <span>進階網路回應擷取（預設關閉）</span>
+        </label>
+        <p>此功能會在 Threads 頁面主世界攔截已知 feed/post GraphQL 回應，僅抽取通過 allowlist 的貼文代碼、媒體類型與媒體 URL；不處理登入、訊息、設定等敏感路徑，也不傳送至開發者伺服器。</p>
+        <p><strong>重新啟用提示：</strong>停用進階擷取或撤銷同意後，目前 document 的擷取 controller 會永久鎖定。若在同一個已開啟分頁重新啟用，請重新載入分頁後再使用。</p>
+      </section>
+
+      <section aria-labelledby="timing-heading">
+        <h2 id="timing-heading">效能微調</h2>
+        <div class="grid">
+          <label>Hover 掃描間隔（ms）<input id="hover-scan-interval" type="number" min="0" max="2000" step="10"></label>
+          <label>版面刷新間隔（ms）<input id="layout-refresh-interval" type="number" min="0" max="5000" step="10"></label>
+          <label>背景掃描間隔（ms）<input id="background-scan-interval" type="number" min="3000" max="60000" step="500"></label>
+        </div>
+        <label class="toggle">
+          <input id="ignore-horizontal-scroll" type="checkbox">
+          <span>忽略只有橫向輪播的捲動</span>
+        </label>
+      </section>
+
+      <div class="actions">
+        <button type="submit">儲存設定</button>
+        <button id="reset-options" class="secondary" type="button">還原預設值</button>
+        <span id="save-status" class="save-status" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+
+    <footer>
+      <a href="privacy.html" target="_blank" rel="noreferrer">隱私權政策</a>
+      <span>·</span>
+      <a href="https://github.com/Jwander0820/threads-plugin" target="_blank" rel="noreferrer">原始碼</a>
+    </footer>
+    <dialog id="network-disclosure">
+      <form method="dialog">
+        <h2>啟用進階網路回應擷取？</h2>
+        <p>啟用後會在 Threads 頁面主世界讀取已知 GraphQL feed/post 回應，以提高影片與輪播媒體解析率。只保留經驗證的貼文代碼、媒體類型與媒體 URL；原始回應不會離開頁面，不會傳給開發者。確認後請重新載入已開啟的 Threads 分頁；先前已停止的 document 不會自動重啟擷取。</p>
+        <div class="actions">
+          <button id="confirm-network-capture" value="confirm" type="submit">我了解並啟用</button>
+          <button value="cancel" class="secondary" type="submit">取消</button>
+        </div>
+      </form>
+    </dialog>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>

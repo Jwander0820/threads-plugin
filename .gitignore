@@ -23,6 +23,7 @@ node_modules/
 
 # Build / temporary output
 dist/
+artifacts/
 build/
 out/
 tmp/
@@ -36,5 +37,5 @@ coverage/
 *.test.user.js
 *.bak
 
-# Local design assets (the icon is embedded directly in the userscript)
+# Local planning/reference assets not shipped by either target
 assets/
