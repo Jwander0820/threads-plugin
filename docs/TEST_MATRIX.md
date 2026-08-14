@@ -107,8 +107,8 @@ The browser-control surface cannot automate `chrome://extensions` and did not yi
 | Manifest name/version/description/permissions | PASS |
 | Privacy policy source and packaged page match implementation | PASS |
 | Permission rationale, single purpose, data mapping, reviewer steps, and unaffiliated notice | PASS |
-| Final icon and 440×280 promotional tile | PENDING_FINAL_DESIGN — current files are build-valid placeholders |
-| One to five screenshots from the final installed product | PENDING_FINAL_ASSET — current screenshot is provisional |
+| Final icon and 440×280 promotional tile | PASS — icon uses designer-supplied `ThreadsPlugin_org.svg`; promo uses the separately supplied raster source and deterministically exports at 440×280 |
+| One to five screenshots from the final installed product | PENDING_FINAL_ASSET — no screenshot is currently present |
 | Public HTTPS privacy-policy URL reachable while signed out | PENDING_EXTERNAL |
 | ZIP automated content/freshness/checksum verification | PASS |
 | ZIP extracted into an empty directory, inspected, and clean-profile installed | PENDING_MANUAL |

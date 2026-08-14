@@ -33,7 +33,7 @@ The automated restart integration reconstructs a fresh worker instance, reconcil
 - PASS — no page-console error was recorded during the tested picker, download, sensitive-route, and return flow.
 
 ## A. Clean-profile install
-- PROVISIONAL — `docs/store-assets/screenshot-01.png` is retained only as current workflow/layout evidence; capture a new final screenshot after icon and Store visual design are approved.
+- MISSING — `docs/store-assets/screenshot-01.png` 尚未建立；icon 與 Store 視覺定稿後，須從真實安裝版本擷取正式 screenshot。
 
 - [ ] Create a new Chrome profile with no Tampermonkey and no other Threads extensions.
 - [ ] Record the freshly verified production ZIP SHA-256, then open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select only the new empty-directory extraction of that exact ZIP.

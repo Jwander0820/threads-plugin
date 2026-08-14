@@ -16,6 +16,8 @@ const STATIC_DIRECTIVES = Object.freeze([
     ['license', 'MIT'],
     ['homepageURL', 'https://github.com/Jwander0820/threads-plugin'],
     ['supportURL', 'https://github.com/Jwander0820/threads-plugin/issues'],
+    ['icon', 'https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/extension/icons/icon-128.png'],
+    ['icon64', 'https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/extension/icons/icon-128.png'],
     ['updateURL', 'https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/threads-plugin.user.js'],
     ['downloadURL', 'https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/threads-plugin.user.js']
 ]);

@@ -6,7 +6,7 @@
 
 - Privacy policy public URL status: `PENDING_EXTERNAL`
 - Manual browser sign-off status: `PENDING_MANUAL_VALIDATION`
-- Required store assets status: `PENDING_DESIGN`
+- Required store assets status: `PENDING_SCREENSHOT`
 
 ## 名稱
 
@@ -118,9 +118,9 @@ Dashboard certifications 全部應與程式碼及公開政策一致：
 
 ## Asset checklist
 
-- **必需 — 128×128 Store／extension icon:** `extension/icons/icon-128.png` 目前是可建置的暫定版本；正式送審前會另行完成視覺定稿。
-- **必需 — 至少一張 screenshot:** `docs/store-assets/screenshot-01.png` 目前只作為尺寸與流程驗證素材，不是最終 Store screenshot。
-- **必需 — 440×280 small promotional tile:** `docs/store-assets/small-promo-440x280.png` 可由目前 icon 重建，但須在正式 icon 定稿後重新產生並審視。
+- **必需 — 128×128 Store／extension icon:** `extension/icon.svg` 是由設計者提供的 `ThreadsPlugin_org.svg` 正式向量原檔副本，`extension/icons/icon-128.png` 是 Store／extension 使用的正式輸出；16、32、48 px 版本由同一原檔產生。
+- **必需 — 至少一張 screenshot:** 尚未建立 `docs/store-assets/screenshot-01.png`；必須從真實安裝版本擷取 1280×800（優先）或 640×400 的滿版畫面。
+- **必需 — 440×280 small promotional tile:** `store-assets/promo-tile-source.png` 是設計者提供的正式 raster source，建置後輸出為 `docs/store-assets/small-promo-440x280.png`；Dashboard 上傳前仍須人工確認實際預覽沒有裁切。
 - **選用 — 1400×560 marquee image:** 只有完成品牌與內容審查後才上傳。
 - Manifest／toolbar icons：16×16、32×32、48×48、128×128 均已 packaged。
 

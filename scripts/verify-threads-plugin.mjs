@@ -120,6 +120,8 @@ function buildChecks(source, packageVersion, metadata, repositoryRoot) {
         ['metadata license', hasSingleValue(directives, 'license', 'MIT')],
         ['metadata homepageURL', hasSingleValue(directives, 'homepageURL', 'https://github.com/Jwander0820/threads-plugin')],
         ['metadata supportURL', hasSingleValue(directives, 'supportURL', 'https://github.com/Jwander0820/threads-plugin/issues')],
+        ['metadata icon', hasSingleValue(directives, 'icon', 'https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/extension/icons/icon-128.png')],
+        ['metadata icon64', hasSingleValue(directives, 'icon64', 'https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/extension/icons/icon-128.png')],
         ['metadata updateURL', hasSingleValue(directives, 'updateURL', 'https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/threads-plugin.user.js')],
         ['metadata downloadURL', hasSingleValue(directives, 'downloadURL', 'https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/threads-plugin.user.js')],
         ['metadata @grant allowlist', grantAllowlist.passed, grantAllowlist.detail],
