@@ -77,7 +77,7 @@ export async function createThreadsRuntime({
         imageUrlsByPostId: new Map(),
         structuredMediaItemsByPostId: new Map(),
         captureRouteGeneration: '',
-        scannedScripts: new WeakSet(),
+        scannedScriptContents: new WeakMap(),
         mediaRouteKey: '',
         hoverButton: null,
         hoverElement: null,
@@ -101,6 +101,7 @@ export async function createThreadsRuntime({
         detailRoute: '',
         modalItems: [],
         scanTimer: 0,
+        pendingScanNetworkRefresh: false,
         rafRefresh: 0,
         layoutRefreshTimer: 0,
         lastLayoutRefreshAt: 0,
@@ -695,7 +696,7 @@ export async function createThreadsRuntime({
             });
         }
 
-        return urls.map(normalizeUrl).find(isImageUrl) || null;
+        return urls.map((url) => normalizeUrl(url)).find(isImageUrl) || null;
     }
 
     function resolveVideoUrl(video, contextElement) {
@@ -3538,6 +3539,35 @@ export async function createThreadsRuntime({
         syncSelectAllState();
     }
 
+    function getModalItemsSnapshot(items) {
+        return (items || []).map((item) => [
+            item.type,
+            getMediaUrlIdentity(item.previewUrl),
+            getMediaUrlIdentity(item.resolvedUrl)
+        ].join(':')).join('|');
+    }
+
+    function refreshOpenPostMediaModal() {
+        const modal = document.getElementById(MODAL_ID);
+        if (!modal || modal.dataset.tmHidden === '1') return false;
+
+        const previousItems = state.modalItems;
+        const nextItems = collectDetailPostMediaItems();
+        if (getModalItemsSnapshot(previousItems) === getModalItemsSnapshot(nextItems)) return false;
+
+        const selectionByMedia = new Map(previousItems.map((item) => [
+            `${item.type}:${getMediaUrlIdentity(item.resolvedUrl || item.previewUrl)}`,
+            item.selected
+        ]));
+        nextItems.forEach((item) => {
+            const key = `${item.type}:${getMediaUrlIdentity(item.resolvedUrl || item.previewUrl)}`;
+            if (selectionByMedia.has(key)) item.selected = selectionByMedia.get(key);
+        });
+        state.modalItems = nextItems;
+        renderPostMediaModal();
+        return true;
+    }
+
     function buildModalItemPreviewMarkup(item) {
         if (item?.type === 'video') {
             const poster = validateMediaUrl(item.previewUrl, 'image');
@@ -3762,7 +3792,7 @@ export async function createThreadsRuntime({
 
     function getBackgroundScanIntervalMs() {
         const value = Number(USER_OPTIONS.backgroundScanIntervalMs);
-        return Number.isFinite(value) ? Math.max(3000, value) : 12000;
+        return Number.isFinite(value) ? Math.max(3000, value) : 5000;
     }
 
     function getMediaRouteKey() {
@@ -3838,11 +3868,19 @@ export async function createThreadsRuntime({
         ensureCopyButtonsForBlocks();
         ensureDetailButton();
         refreshHoverButtonLayout();
+        refreshOpenPostMediaModal();
     }
 
-    function scheduleRefresh() {
-        window.clearTimeout(state.scanTimer);
-        state.scanTimer = window.setTimeout(refreshButtons, SCAN_DEBOUNCE_MS);
+    function scheduleRefresh(options = {}) {
+        if (options.scanNetwork !== false) state.pendingScanNetworkRefresh = true;
+        if (state.scanTimer) return;
+
+        state.scanTimer = window.setTimeout(() => {
+            state.scanTimer = 0;
+            const scanNetwork = state.pendingScanNetworkRefresh;
+            state.pendingScanNetworkRefresh = false;
+            refreshButtons({ scanNetwork });
+        }, SCAN_DEBOUNCE_MS);
     }
 
     function runQueuedLayoutRefresh() {
@@ -4000,12 +4038,12 @@ export async function createThreadsRuntime({
     function scanInlineScriptsForVideoUrls() {
         if (isSensitiveThreadsRoute(location.href)) return;
         Array.from(document.scripts || []).forEach((script) => {
-            if (state.scannedScripts.has(script)) return;
-
-            state.scannedScripts.add(script);
             const text = script.textContent || '';
+            if (state.scannedScriptContents.get(script) === text) return;
+
+            state.scannedScriptContents.set(script, text);
             if (utf8ByteLength(text) > NETWORK_RESPONSE_MAX_BYTES) return;
-            if (!/video_versions|playable_url|video_url|image_versions|\.mp4|\.jpe?g|\.png|\.webp|bytestart|byteend/i.test(text)) return;
+            if (!/video_versions|playable_url|video_url|image_versions|\.mp4|\.jpe?g|\.hei[cf]|\.png|\.webp|bytestart|byteend/i.test(text)) return;
 
             extractVideoUrlsFromText(text, getMediaRouteKey());
         });
@@ -4348,6 +4386,9 @@ export async function createThreadsRuntime({
             mergeMediaUrlCache,
             rememberNativeShareContext,
             orderMediaElementsByVisualPosition,
+            resolveImageUrl,
+            scanInlineScriptsForVideoUrls,
+            scheduleRefresh,
             selectPostBoundVideoUrl,
             syncMediaRouteScope,
             transitionMediaRouteScope,
@@ -4416,6 +4457,7 @@ export async function createThreadsRuntime({
             window.clearTimeout(state.hoverScanTimer);
             window.clearTimeout(state.layoutRefreshTimer);
             state.scanTimer = 0;
+            state.pendingScanNetworkRefresh = false;
             state.hoverScanTimer = 0;
             state.layoutRefreshTimer = 0;
             if (state.hoverMoveRaf) window.cancelAnimationFrame(state.hoverMoveRaf);
@@ -4440,7 +4482,7 @@ export async function createThreadsRuntime({
             });
         }
         state.postCounters.clear();
-        state.scannedScripts = new WeakSet();
+        state.scannedScriptContents = new WeakMap();
         state.mediaRouteKey = '';
         state.captureRouteGeneration = '';
         state.modalItems = [];

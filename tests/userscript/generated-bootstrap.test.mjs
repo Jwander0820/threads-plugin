@@ -3,6 +3,15 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import vm from 'node:vm';
 
+const GREASY_FORK_UPDATE_URL = 'https://update.greasyfork.org/scripts/584182/Threads%20Plugin.user.js';
+
+test('generated userscript preserves the Greasy Fork update endpoint', async () => {
+    const source = await readFile(new URL('../../threads-plugin.user.js', import.meta.url), 'utf8');
+
+    assert.match(source, new RegExp(`^// @updateURL\\s+${GREASY_FORK_UPDATE_URL.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}$`, 'm'));
+    assert.match(source, new RegExp(`^// @downloadURL\\s+${GREASY_FORK_UPDATE_URL.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}$`, 'm'));
+});
+
 test('generated userscript IIFE executes its real bootstrap and installs runtime capabilities', async () => {
     const [source, packageData] = await Promise.all([
         readFile(new URL('../../threads-plugin.user.js', import.meta.url), 'utf8'),

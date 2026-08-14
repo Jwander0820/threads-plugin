@@ -23,6 +23,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Reduced the default full media fallback scan from 12 seconds to 5 seconds; DOM mutations still trigger the faster event-driven path.
 - Refocused `README.md` on user-facing features, installation, usage, and privacy, while keeping detailed engineering guidance outside the public README.
 - Moved the existing feature runtime under `src/shared` with explicit `start`, `stop`, option update, and captured-media ingestion lifecycle methods.
 - Made `package.json` the single product-version source and centralized website/permission allowlists.
@@ -33,6 +34,10 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Restored direct DOM image discovery and hover-download buttons after the shared URL normalizer gained an optional base-URL parameter that conflicted with `Array.map` callback arguments.
+- Prevented continuous Threads DOM mutations from indefinitely postponing media discovery, rescanned reused inline-script nodes when their payload changes, and refreshed an already-open media picker when late images or videos arrive.
+- Fixed Threads image downloads when trusted CDN renditions use `.heic` or `.heif` paths, including JPEG-transcoded carousel images that previously produced an empty media picker.
+- Restored the userscript update and download metadata to the existing Greasy Fork endpoint for script 584182.
 - Fixed the media picker keyboard contract so focus enters the dialog, Tab and Shift+Tab remain trapped, Escape closes it, and focus returns to the opener.
 - Fixed clean post links for Threads usernames beginning with an underscore; URL identity is now preserved while filenames remain sanitized independently.
 - Fixed hover-download post identity for real detail-page carousel media nested more than twenty DOM ancestors deep without weakening quoted/reply isolation.

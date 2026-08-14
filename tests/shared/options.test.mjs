@@ -20,4 +20,5 @@ test('options normalization is immutable, bounded and shared across adapters', (
     });
     assert.equal(Object.isFrozen(normalized), true);
     assert.deepEqual(normalizeOptions(null), DEFAULT_OPTIONS);
+    assert.equal(DEFAULT_OPTIONS.backgroundScanIntervalMs, 5000);
 });

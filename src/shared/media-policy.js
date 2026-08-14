@@ -9,7 +9,7 @@ const MEDIA_HOST_SUFFIX_ALLOWLIST = Object.freeze([
     'cdninstagram.com',
     'fbcdn.net'
 ]);
-const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'avif', 'gif']);
+const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'avif', 'gif', 'heic', 'heif']);
 const VIDEO_EXTENSIONS = new Set(['mp4', 'm4v', 'mov', 'webm']);
 
 export const MEDIA_URL_MAX_LENGTH = 8192;
@@ -133,7 +133,17 @@ function formatUtcTimestamp(dateLike, now = () => new Date()) {
 
 function guessExtension(type, url, contentType) {
     const validated = validateMediaUrl(url, type);
-    if (validated.ok) return validated.extension === 'jpeg' ? 'jpg' : validated.extension;
+    if (validated.ok) {
+        if (validated.extension === 'jpeg') return 'jpg';
+        if (
+            type === 'image' &&
+            ['heic', 'heif'].includes(validated.extension) &&
+            /(?:^|_)dst-jpe?g(?:_|$)/i.test(new URL(validated.url).searchParams.get('stp') || '')
+        ) {
+            return 'jpg';
+        }
+        return validated.extension;
+    }
 
     if (/mp4/i.test(contentType || '')) return 'mp4';
     if (/webm/i.test(contentType || '')) return 'webm';

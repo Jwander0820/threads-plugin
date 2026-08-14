@@ -18,8 +18,8 @@ const STATIC_DIRECTIVES = Object.freeze([
     ['supportURL', 'https://github.com/Jwander0820/threads-plugin/issues'],
     ['icon', 'https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/extension/icons/icon-128.png'],
     ['icon64', 'https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/extension/icons/icon-128.png'],
-    ['updateURL', 'https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/threads-plugin.user.js'],
-    ['downloadURL', 'https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/threads-plugin.user.js']
+    ['updateURL', 'https://update.greasyfork.org/scripts/584182/Threads%20Plugin.user.js'],
+    ['downloadURL', 'https://update.greasyfork.org/scripts/584182/Threads%20Plugin.user.js']
 ]);
 
 function directive(name, value) {

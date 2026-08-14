@@ -2,7 +2,7 @@ export const DEFAULT_OPTIONS = Object.freeze({
     enablePostMediaPicker: true,
     hoverScanIntervalMs: 160,
     layoutRefreshIntervalMs: 260,
-    backgroundScanIntervalMs: 12000,
+    backgroundScanIntervalMs: 5000,
     ignoreHorizontalOnlyScroll: true
 });
 

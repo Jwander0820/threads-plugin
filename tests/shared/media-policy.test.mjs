@@ -32,6 +32,23 @@ test('media policy enforces scheme, credentials, port, host, extension and reque
     }
 });
 
+test('media policy accepts Threads HEIC image paths without weakening host or type checks', () => {
+    const threadsHeic = 'https://scontent-tpe1-1.cdninstagram.com/v/t51.82787-15/photo.heic?stp=dst-jpg_e35_tt6';
+
+    assert.deepEqual(validateMediaUrl(threadsHeic, 'image'), {
+        ok: true,
+        url: threadsHeic,
+        type: 'image',
+        extension: 'heic',
+        hostname: 'scontent-tpe1-1.cdninstagram.com'
+    });
+    assert.equal(validateMediaUrl(threadsHeic, 'video').reason, 'media_type_mismatch');
+    assert.equal(
+        validateMediaUrl('https://attacker.example/photo.heic?stp=dst-jpg', 'image').reason,
+        'host_not_allowed'
+    );
+});
+
 test('media policy accepts the fixed URL-length boundary and rejects one character over it', () => {
     const exact = mediaUrlWithLength(MEDIA_URL_MAX_LENGTH);
     const oversized = mediaUrlWithLength(MEDIA_URL_MAX_LENGTH + 1);
@@ -58,4 +75,13 @@ test('filename builder is deterministic and normalizes jpeg extension', () => {
         postInfo: { author: '_yunaaa_.07', postId: 'POST_A', createdAt: new Date('2026-08-12T01:02:03Z') },
         sequence: '02'
     }), '_yunaaa_.07_20260812-010203Z_POST_A_video_02.mp4');
+});
+
+test('filename builder names Threads HEIC-to-JPEG renditions as jpg', () => {
+    assert.equal(buildMediaFilename({
+        type: 'image',
+        url: 'https://scontent.cdninstagram.com/media/photo.heic?stp=dst-jpg_e35_tt6',
+        postInfo: { author: 'kitaro_cos', postId: 'DcAdX-hEV_T', createdAt: new Date('2026-08-13T01:02:03Z') },
+        sequence: '01'
+    }), 'kitaro_cos_20260813-010203Z_DcAdX-hEV_T_photo_01.jpg');
 });

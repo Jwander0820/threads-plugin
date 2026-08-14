@@ -13,8 +13,8 @@
 // @supportURL   https://github.com/Jwander0820/threads-plugin/issues
 // @icon         https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/extension/icons/icon-128.png
 // @icon64       https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/extension/icons/icon-128.png
-// @updateURL    https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/threads-plugin.user.js
-// @downloadURL  https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/threads-plugin.user.js
+// @updateURL    https://update.greasyfork.org/scripts/584182/Threads%20Plugin.user.js
+// @downloadURL  https://update.greasyfork.org/scripts/584182/Threads%20Plugin.user.js
 // @match        https://www.threads.com/*
 // @match        https://threads.com/*
 // @match        https://www.threads.net/*
@@ -50,7 +50,7 @@
     enablePostMediaPicker: true,
     hoverScanIntervalMs: 160,
     layoutRefreshIntervalMs: 260,
-    backgroundScanIntervalMs: 12e3,
+    backgroundScanIntervalMs: 5e3,
     ignoreHorizontalOnlyScroll: true
   });
   function normalizeNumber(value, fallback, min, max) {
@@ -89,7 +89,7 @@
     "cdninstagram.com",
     "fbcdn.net"
   ]);
-  var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set(["jpg", "jpeg", "png", "webp", "avif", "gif"]);
+  var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set(["jpg", "jpeg", "png", "webp", "avif", "gif", "heic", "heif"]);
   var VIDEO_EXTENSIONS = /* @__PURE__ */ new Set(["mp4", "m4v", "mov", "webm"]);
   var MEDIA_URL_MAX_LENGTH = 8192;
   function sanitizeMediaFilenamePart(value) {
@@ -168,7 +168,13 @@
   }
   function guessExtension(type, url, contentType) {
     const validated = validateMediaUrl(url, type);
-    if (validated.ok) return validated.extension === "jpeg" ? "jpg" : validated.extension;
+    if (validated.ok) {
+      if (validated.extension === "jpeg") return "jpg";
+      if (type === "image" && ["heic", "heif"].includes(validated.extension) && /(?:^|_)dst-jpe?g(?:_|$)/i.test(new URL(validated.url).searchParams.get("stp") || "")) {
+        return "jpg";
+      }
+      return validated.extension;
+    }
     if (/mp4/i.test(contentType || "")) return "mp4";
     if (/webm/i.test(contentType || "")) return "webm";
     if (/png/i.test(contentType || "")) return "png";
@@ -799,7 +805,7 @@
       imageUrlsByPostId: /* @__PURE__ */ new Map(),
       structuredMediaItemsByPostId: /* @__PURE__ */ new Map(),
       captureRouteGeneration: "",
-      scannedScripts: /* @__PURE__ */ new WeakSet(),
+      scannedScriptContents: /* @__PURE__ */ new WeakMap(),
       mediaRouteKey: "",
       hoverButton: null,
       hoverElement: null,
@@ -823,6 +829,7 @@
       detailRoute: "",
       modalItems: [],
       scanTimer: 0,
+      pendingScanNetworkRefresh: false,
       rafRefresh: 0,
       layoutRefreshTimer: 0,
       lastLayoutRefreshAt: 0,
@@ -1367,7 +1374,7 @@
           urls.push(pickBestFromSrcset(source.getAttribute("srcset") || source.srcset));
         });
       }
-      return urls.map(normalizeUrl).find(isImageUrl) || null;
+      return urls.map((url) => normalizeUrl(url)).find(isImageUrl) || null;
     }
     function resolveVideoUrl(video, contextElement) {
       syncMediaRouteScope();
@@ -3542,6 +3549,31 @@
       });
       syncSelectAllState();
     }
+    function getModalItemsSnapshot(items) {
+      return (items || []).map((item) => [
+        item.type,
+        getMediaUrlIdentity(item.previewUrl),
+        getMediaUrlIdentity(item.resolvedUrl)
+      ].join(":")).join("|");
+    }
+    function refreshOpenPostMediaModal() {
+      const modal = document.getElementById(MODAL_ID);
+      if (!modal || modal.dataset.tmHidden === "1") return false;
+      const previousItems = state.modalItems;
+      const nextItems = collectDetailPostMediaItems();
+      if (getModalItemsSnapshot(previousItems) === getModalItemsSnapshot(nextItems)) return false;
+      const selectionByMedia = new Map(previousItems.map((item) => [
+        `${item.type}:${getMediaUrlIdentity(item.resolvedUrl || item.previewUrl)}`,
+        item.selected
+      ]));
+      nextItems.forEach((item) => {
+        const key = `${item.type}:${getMediaUrlIdentity(item.resolvedUrl || item.previewUrl)}`;
+        if (selectionByMedia.has(key)) item.selected = selectionByMedia.get(key);
+      });
+      state.modalItems = nextItems;
+      renderPostMediaModal();
+      return true;
+    }
     function buildModalItemPreviewMarkup(item) {
       if (item?.type === "video") {
         const poster = validateMediaUrl(item.previewUrl, "image");
@@ -3721,7 +3753,7 @@
     }
     function getBackgroundScanIntervalMs() {
       const value = Number(USER_OPTIONS.backgroundScanIntervalMs);
-      return Number.isFinite(value) ? Math.max(3e3, value) : 12e3;
+      return Number.isFinite(value) ? Math.max(3e3, value) : 5e3;
     }
     function getMediaRouteKey() {
       return buildMediaRouteKey(location.href);
@@ -3780,10 +3812,17 @@
       ensureCopyButtonsForBlocks();
       ensureDetailButton();
       refreshHoverButtonLayout();
+      refreshOpenPostMediaModal();
     }
-    function scheduleRefresh() {
-      window.clearTimeout(state.scanTimer);
-      state.scanTimer = window.setTimeout(refreshButtons, SCAN_DEBOUNCE_MS);
+    function scheduleRefresh(options = {}) {
+      if (options.scanNetwork !== false) state.pendingScanNetworkRefresh = true;
+      if (state.scanTimer) return;
+      state.scanTimer = window.setTimeout(() => {
+        state.scanTimer = 0;
+        const scanNetwork = state.pendingScanNetworkRefresh;
+        state.pendingScanNetworkRefresh = false;
+        refreshButtons({ scanNetwork });
+      }, SCAN_DEBOUNCE_MS);
     }
     function runQueuedLayoutRefresh() {
       if (state.rafRefresh) return;
@@ -3917,11 +3956,11 @@
     function scanInlineScriptsForVideoUrls() {
       if (isSensitiveThreadsRoute(location.href)) return;
       Array.from(document.scripts || []).forEach((script) => {
-        if (state.scannedScripts.has(script)) return;
-        state.scannedScripts.add(script);
         const text = script.textContent || "";
+        if (state.scannedScriptContents.get(script) === text) return;
+        state.scannedScriptContents.set(script, text);
         if (utf8ByteLength(text) > NETWORK_RESPONSE_MAX_BYTES) return;
-        if (!/video_versions|playable_url|video_url|image_versions|\.mp4|\.jpe?g|\.png|\.webp|bytestart|byteend/i.test(text)) return;
+        if (!/video_versions|playable_url|video_url|image_versions|\.mp4|\.jpe?g|\.hei[cf]|\.png|\.webp|bytestart|byteend/i.test(text)) return;
         extractVideoUrlsFromText(text, getMediaRouteKey());
       });
     }
@@ -4234,6 +4273,9 @@
       mergeMediaUrlCache,
       rememberNativeShareContext,
       orderMediaElementsByVisualPosition,
+      resolveImageUrl,
+      scanInlineScriptsForVideoUrls,
+      scheduleRefresh,
       selectPostBoundVideoUrl,
       syncMediaRouteScope,
       transitionMediaRouteScope,
@@ -4298,6 +4340,7 @@
         window.clearTimeout(state.hoverScanTimer);
         window.clearTimeout(state.layoutRefreshTimer);
         state.scanTimer = 0;
+        state.pendingScanNetworkRefresh = false;
         state.hoverScanTimer = 0;
         state.layoutRefreshTimer = 0;
         if (state.hoverMoveRaf) window.cancelAnimationFrame(state.hoverMoveRaf);
@@ -4322,7 +4365,7 @@
         });
       }
       state.postCounters.clear();
-      state.scannedScripts = /* @__PURE__ */ new WeakSet();
+      state.scannedScriptContents = /* @__PURE__ */ new WeakMap();
       state.mediaRouteKey = "";
       state.captureRouteGeneration = "";
       state.modalItems = [];

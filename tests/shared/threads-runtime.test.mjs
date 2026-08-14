@@ -96,6 +96,86 @@ test('media modal traps keyboard focus and Escape closes it', async () => {
     assert.deepEqual(focused, ['second', 'first']);
 });
 
+test('queued media refresh cannot be starved by repeated page mutations', async () => {
+    let timerId = 0;
+    let cancelledTimers = 0;
+    const timeouts = new Map();
+    const runtime = await createThreadsRuntime({
+        platform: fakePlatform(),
+        document: { body: {}, documentElement: {}, scripts: [], querySelectorAll() { return []; } },
+        window: {
+            setTimeout(callback) { timerId += 1; timeouts.set(timerId, callback); return timerId; },
+            clearTimeout(id) {
+                if (id && timeouts.delete(id)) cancelledTimers += 1;
+            }
+        },
+        initialOptions: {}
+    });
+
+    runtime.testing.scheduleRefresh();
+    runtime.testing.scheduleRefresh();
+    runtime.testing.scheduleRefresh({ scanNetwork: false });
+
+    assert.equal(timeouts.size, 1);
+    assert.equal(cancelledTimers, 0);
+});
+
+test('DOM image resolution isolates the URL normalizer from Array.map callback arguments', async () => {
+    const imageUrl = 'https://scontent.cdninstagram.com/v/example/photo.jpg?stp=dst-jpg';
+    const image = {
+        currentSrc: imageUrl,
+        src: imageUrl,
+        getAttribute(name) {
+            if (name === 'src') return imageUrl;
+            if (name === 'srcset') return '';
+            return null;
+        },
+        closest() { return null; }
+    };
+    const runtime = await createThreadsRuntime({ platform: fakePlatform() });
+
+    assert.equal(runtime.testing.resolveImageUrl(image), imageUrl);
+});
+
+test('inline media scanner rescans a reused script element only after its content changes', async (t) => {
+    const originalLocation = globalThis.location;
+    globalThis.location = { href: 'https://www.threads.com/@author/post/POST_1' };
+    t.after(() => {
+        if (originalLocation === undefined) delete globalThis.location;
+        else globalThis.location = originalLocation;
+    });
+
+    const script = {
+        textContent: JSON.stringify({
+            post: {
+                code: 'POST_1',
+                image_versions2: { candidates: [{ url: 'https://cdninstagram.com/first.jpg' }] }
+            }
+        })
+    };
+    const runtime = await createThreadsRuntime({
+        platform: fakePlatform(),
+        document: { body: null, documentElement: {}, scripts: [script], querySelectorAll() { return []; } },
+        window: {},
+        initialOptions: {}
+    });
+
+    runtime.testing.scanInlineScriptsForVideoUrls();
+    runtime.testing.scanInlineScriptsForVideoUrls();
+    assert.equal(runtime.testing.getPerformanceSnapshot().networkPayloadParses, 1);
+
+    script.textContent = JSON.stringify({
+        post: {
+            code: 'POST_1',
+            video_versions: [{ url: 'https://cdninstagram.com/late.mp4' }]
+        }
+    });
+    runtime.testing.scanInlineScriptsForVideoUrls();
+
+    assert.equal(runtime.testing.getPerformanceSnapshot().networkPayloadParses, 2);
+    assert.equal(runtime.testing.getPerformanceSnapshot().videoRouteCacheEntries, 1);
+});
+
 test('media modal intent stays bound to immutable control identity after dataset tampering', async () => {
     const runtime = await createThreadsRuntime({ platform: fakePlatform() });
     const selectAll = { dataset: { action: 'select-all' } };
