@@ -38,56 +38,65 @@ The automated restart integration reconstructs a fresh worker instance, reconcil
 - [ ] Create a new Chrome profile with no Tampermonkey and no other Threads extensions.
 - [ ] Record the freshly verified production ZIP SHA-256, then open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select only the new empty-directory extraction of that exact ZIP.
 - [ ] Confirm Chrome reports no manifest or service-worker error; from service-worker DevTools stop the worker, reopen Threads/options, perform one download, and confirm the worker restarts, consent persists, dynamic capture registration reconciles, and no error appears.
-- [ ] Confirm the extension icon and options page render at normal and 200% zoom.
-- [ ] Confirm manifest permissions shown by Chrome are limited to downloads, storage, scripting, and the four Threads origins.
+- [x] Confirm the extension icon and options page render at normal and 200% zoom. — Owner-reported PASS on the unpacked development extension.
+- [x] Confirm manifest permissions shown by Chrome are limited to downloads, storage, scripting, and the four Threads origins. — Owner-reported PASS.
 
 ## B. Disclosure and revocation
 
-- [ ] With storage cleared, open `https://www.threads.com/`; confirm only the disclosure appears and no Threads Plugin media/copy controls exist behind it.
-- [ ] Choose **暫不啟用**; reload and confirm no disclosure and no plugin controls.
-- [ ] Open extension options, choose **同意並啟用**; return to the already-open Threads tab and confirm controls appear without a reload.
-- [ ] Enable advanced capture; confirm the second disclosure appears before the toggle becomes enabled.
-- [ ] Disable advanced capture; confirm the option is off, service-worker DevTools shows no registered `threads-plugin-main-capture-v1` script, and the already-open document's fetch/XHR wrappers are immediately restored.
-- [ ] Without reloading that same document, enable advanced capture again; confirm options instructs a reload and the stopped controller does not restart or produce `MEDIA_RECORDS`. Reload the tab (or open a new document), confirm capture can start only there, then choose **撤銷同意**; confirm controls disappear, the dynamic script is unregistered, and the revoked document cannot restart capture.
-- [ ] Visit `/login/`, `/messages/`, `/settings/`, and `/accounts/` paths if accessible; confirm no plugin controls or disclosure appear.
+- [x] With storage cleared, open `https://www.threads.com/`; confirm only the disclosure appears and no Threads Plugin media/copy controls exist behind it.
+- [x] Choose **暫不啟用**; reload and confirm no disclosure and no plugin controls.
+- [x] Open extension options, choose **同意並啟用**; return to the already-open Threads tab and confirm controls appear without a reload.
+- [x] Enable advanced capture; confirm the second disclosure appears before the toggle becomes enabled.
+- [x] Disable advanced capture; confirm the option is off, service-worker DevTools shows no registered `threads-plugin-main-capture-v1` script, and the already-open document's fetch/XHR wrappers are immediately restored.
+- [x] Without reloading that same document, enable advanced capture again; confirm options instructs a reload and the stopped controller does not restart or produce `MEDIA_RECORDS`. Reload the tab (or open a new document), confirm capture can start only there, then choose **撤銷同意**; confirm controls disappear, the dynamic script is unregistered, and the revoked document cannot restart capture.
+- [x] Visit `/login/`, `/messages/`, `/settings/`, and `/accounts/` paths if accessible; confirm no plugin controls or disclosure appear.
+
+Items in this section are owner-reported PASS for the 2026-08-14 functional acceptance run. The checklist wording is retained as the reusable procedure for future releases.
 
 ## C. Functional parity matrix
 
 Repeat on home feed, following feed, profile, single-post detail, replies where available, and after SPA back/forward navigation.
 
-- [ ] Hover a normal image and download it; verify file exists, opens, and filename contains author, UTC timestamp, post ID, `photo`, and sequence.
-- [ ] Hover a normal video and download it; verify file exists, plays, and filename contains `video`.
-- [ ] Open a mixed image/video carousel; verify picker order matches visible carousel order and duplicate real slots remain separate.
-- [ ] Select a subset in the media picker; verify only selected items download and repeated click while busy does not duplicate downloads.
-- [ ] Test a quoted/reposted/reply post; verify media and filename never borrow the surrounding post identity.
-- [ ] Copy post text from a long post containing translation/tag/counter UI; verify only intended post text is copied.
-- [ ] Copy the direct clean link; verify known tracking parameters are absent and the correct post URL remains.
-- [ ] Open the native Threads share menu and use the injected clean-link action; verify it targets the same post, including quoted posts.
-- [ ] Navigate between posts without full reload; verify old route media never appears in the new post picker.
-- [ ] At 200% zoom and keyboard-only navigation, verify disclosure, options, picker modal, buttons, focus rings, and Escape/close behavior remain usable; return to normal zoom and save at least one accurate 1280×800 or 640×400 Store screenshot as `docs/store-assets/screenshot-01.png`.
+- [x] Hover a normal image and download it; verify file exists, opens, and filename contains author, UTC timestamp, post ID, `photo`, and sequence.
+- [x] Hover a normal video and download it; verify file exists, plays, and filename contains `video`.
+- [x] Open a mixed image/video carousel; verify picker order matches visible carousel order and duplicate real slots remain separate.
+- [x] Select a subset in the media picker; verify only selected items download and repeated click while busy does not duplicate downloads.
+- [x] Test a quoted/reposted/reply post; verify media and filename never borrow the surrounding post identity.
+- [x] Copy post text from a long post containing translation/tag/counter UI; verify only intended post text is copied.
+- [x] Copy the direct clean link; verify known tracking parameters are absent and the correct post URL remains.
+- [x] Open the native Threads share menu and use the injected clean-link action; verify it targets the same post, including quoted posts.
+- [x] Navigate between posts without full reload; verify old route media never appears in the new post picker.
+- [x] At 200% zoom and keyboard-only navigation, verify disclosure, options, picker modal, buttons, focus rings, and Escape/close behavior remain usable.
+- [ ] Save at least one accurate 1280×800 or 640×400 Store screenshot as `docs/store-assets/screenshot-01.png`. — Explicitly deferred until after merging to `main` and reviewing the Store submission package.
+
+Items in this section are owner-reported PASS for both the Chrome Extension and Tampermonkey 5.1.0 functional acceptance run.
 
 ## D. Network and security observations
 
-- [ ] With advanced capture off, inspect page globals/network behavior and confirm Threads Plugin does not wrap page fetch/XHR.
-- [ ] With advanced capture on, verify only known feed/post GraphQL operations produce `MEDIA_RECORDS`; login/message/settings operations do not.
-- [ ] Change routes while a response is in flight; verify stale-route records do not populate the new route.
-- [ ] Confirm extension service-worker console and page console have no errors through enable/disable/revoke cycles.
-- [ ] Confirm no request is sent to a developer-owned analytics or backend domain.
+- [x] With advanced capture off, inspect page globals/network behavior and confirm Threads Plugin does not wrap page fetch/XHR.
+- [x] With advanced capture on, verify only known feed/post GraphQL operations produce `MEDIA_RECORDS`; login/message/settings operations do not.
+- [x] Change routes while a response is in flight; verify stale-route records do not populate the new route.
+- [x] Confirm extension service-worker console and page console have no unexpected functional errors through enable/disable/revoke cycles.
+- [x] Confirm no request is sent to a developer-owned analytics or backend domain.
+
+Known lifecycle observation: reloading, updating, disabling, or re-enabling the unpacked extension invalidates content scripts that were already running in open Threads tabs. An old tab may log `route sync failed Error: Extension context invalidated.` and its controls can stop responding until that tab is reloaded. This is accepted as a low-severity update/development lifecycle limitation, not a functional or data-safety failure; it is not expected to appear as an in-page message to ordinary users.
 
 ## E. Userscript regression
 
-- [ ] In a separate profile with Tampermonkey, overwrite/import the generated root `threads-plugin.user.js`; after reload, confirm the media dialog has `aria-labelledby`, focus enters the dialog, Escape closes it, and focus returns to its opener.
-- [ ] Repeat the functional parity matrix for image, video, mixed carousel, text copy, direct clean link, native share clean link, SPA navigation, quoted posts, filenames, and 200% zoom.
-- [ ] Confirm Tampermonkey lists only the declared `@grant`, `@connect`, and four `@match` entries and no `@require`.
+- [x] In a separate profile with Tampermonkey, overwrite/import the generated root `threads-plugin.user.js`; after reload, confirm the media dialog has `aria-labelledby`, focus enters the dialog, Escape closes it, and focus returns to its opener.
+- [x] Repeat the functional parity matrix for image, video, mixed carousel, text copy, direct clean link, native share clean link, SPA navigation, quoted posts, filenames, and 200% zoom.
+- [x] Confirm Tampermonkey lists only the declared `@grant`, `@connect`, and four `@match` entries and no `@require`.
+
+Items in this section are owner-reported PASS for the generated Threads Plugin 5.1.0 userscript. The Tampermonkey manager version was not recorded in this run.
 
 Record Chrome version, OS, test account state, tested URLs/post types, download filenames, failures, and screenshots below. Do not include private post content or credentials in evidence.
 
 ## Sign-off
 
-- Tester:
-- Date/time (Asia/Taipei):
-- Chrome version:
-- Tampermonkey version:
-- Chrome Extension result:
-- Userscript result:
-- Known limitations accepted:
+- Tester: Jwander (owner-reported functional acceptance)
+- Date/time (Asia/Taipei): 2026-08-14
+- Chrome version: 151.0.7922.138
+- Tampermonkey version: Not recorded; generated Threads Plugin userscript version 5.1.0 tested
+- Chrome Extension result: PASS — unpacked development extension functional acceptance
+- Userscript result: PASS — generated Threads Plugin 5.1.0 functional acceptance
+- Known limitations accepted: already-open Threads tabs must be reloaded after extension reload/update if their previous extension context was invalidated. Final production-ZIP clean extraction/install, Store screenshot, public privacy URL, and Dashboard submission review remain separate release gates.

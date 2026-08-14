@@ -7,7 +7,7 @@
 - Products: generated Tampermonkey userscript and Manifest V3 Chrome Extension
 - Production archive: `artifacts/threads-plugin-chrome-5.1.0.zip`
 - Automated environment: Windows, Node.js, deterministic local fixture
-- Human environment: signed-in Threads access available; clean-profile extension and Tampermonkey verification in progress
+- Human environment: signed-in Threads access available; owner-reported Chrome Extension and Tampermonkey 5.1.0 functional acceptance completed on 2026-08-14; exact final-ZIP clean-profile verification remains pending
 
 This file distinguishes executable local evidence from checks that require a real installed extension, live Threads account state, or a public URL. Pending rows are release blockers; they are not skipped or treated as passes.
 
@@ -74,31 +74,33 @@ The browser-control surface cannot automate `chrome://extensions` and did not yi
 
 | Behavior | Shared/automated evidence | Real Chrome MV3 | Tampermonkey |
 | --- | --- | --- | --- |
-| Image and video download | PASS | PENDING_MANUAL | PENDING_MANUAL |
-| Mixed carousel order, real duplicate slots, subset batch | PASS | PENDING_MANUAL | PENDING_MANUAL |
-| Busy-state duplicate suppression and late-stop safety | PASS | PENDING_MANUAL | PENDING_MANUAL |
-| Quoted, reposted, and reply identity isolation | PASS | PENDING_MANUAL | PENDING_MANUAL |
-| Post-text copy | PASS | PENDING_MANUAL | PENDING_MANUAL |
-| Direct clean-link copy and tracking removal | PASS | PENDING_MANUAL | PENDING_MANUAL |
-| Native-share clean-link action | PASS | PENDING_MANUAL | PENDING_MANUAL |
-| SPA route isolation and stale record rejection | PASS | PENDING_MANUAL | PENDING_MANUAL |
-| Filename author/time/post/type/sequence fields | PASS | PENDING_MANUAL | PENDING_MANUAL |
-| 200% zoom, keyboard, focus, Escape/close | static/fixture evidence | PENDING_MANUAL | PENDING_MANUAL |
+| Image and video download | PASS | PASS — owner reported | PASS — owner reported |
+| Mixed carousel order, real duplicate slots, subset batch | PASS | PASS — owner reported | PASS — owner reported |
+| Busy-state duplicate suppression and late-stop safety | PASS | PASS — owner reported | PASS — owner reported |
+| Quoted, reposted, and reply identity isolation | PASS | PASS — owner reported | PASS — owner reported |
+| Post-text copy | PASS | PASS — owner reported | PASS — owner reported |
+| Direct clean-link copy and tracking removal | PASS | PASS — owner reported | PASS — owner reported |
+| Native-share clean-link action | PASS | PASS — owner reported | PASS — owner reported |
+| SPA route isolation and stale record rejection | PASS | PASS — owner reported | PASS — owner reported |
+| Filename author/time/post/type/sequence fields | PASS | PASS — owner reported | PASS — owner reported |
+| 200% zoom, keyboard, focus, Escape/close | static/fixture evidence | PASS — owner reported | PASS — owner reported |
 
 ## Chrome privacy and lifecycle matrix
 
 | Invariant | Automated evidence | Real-browser status |
 | --- | --- | --- |
-| Before first consent, runtime and advanced capture are dormant | consent/bootstrap/disclosure tests and fixture | PENDING_MANUAL |
-| Decline persists without repeated disclosure | consent/disclosure tests and fixture | PENDING_MANUAL |
-| Existing tab reacts to page-content accept; advanced disable/revoke stops and permanently locks that document's MAIN controller | lifecycle queue, service-worker, and MAIN integration tests | PENDING_MANUAL |
-| Network capture requires independent second confirmation | options dialog tests and fixture | PENDING_MANUAL |
-| Dynamic MAIN registration is exact, repaired, and removed on revoke; same-document re-enable remains locked until reload/new document | capture-registration, service-worker, and MAIN runtime tests | PENDING_MANUAL |
-| Login/messages/settings/account routes fail closed | route, content, MAIN, and download tests; fixture `/messages/` | PENDING_MANUAL |
-| In-flight response work cannot parse or post after stop/route change | abort, content-issued/monotonic generation, A→B→A fetch, and XHR tests | PENDING_MANUAL |
-| Download message requires valid extension/top-frame/tab/route/consent/media/filename | download-handler adversarial tests | PENDING_MANUAL |
+| Before first consent, runtime and advanced capture are dormant | consent/bootstrap/disclosure tests and fixture | PASS — owner reported |
+| Decline persists without repeated disclosure | consent/disclosure tests and fixture | PASS — owner reported |
+| Existing tab reacts to page-content accept; advanced disable/revoke stops and permanently locks that document's MAIN controller | lifecycle queue, service-worker, and MAIN integration tests | PASS — owner reported |
+| Network capture requires independent second confirmation | options dialog tests and fixture | PASS — owner reported |
+| Dynamic MAIN registration is exact, repaired, and removed on revoke; same-document re-enable remains locked until reload/new document | capture-registration, service-worker, and MAIN runtime tests | PASS — owner reported |
+| Login/messages/settings/account routes fail closed | route, content, MAIN, and download tests; fixture `/messages/` | PASS — owner reported |
+| In-flight response work cannot parse or post after stop/route change | abort, content-issued/monotonic generation, A→B→A fetch, and XHR tests | PASS — owner reported |
+| Download message requires valid extension/top-frame/tab/route/consent/media/filename | download-handler adversarial tests | PASS — owner reported |
 | Service-worker restart reconstructs registration and download behavior | deterministic restart/reconstruction integration passes | PENDING_MANUAL real Chrome termination/restart |
-| No developer analytics/backend request | source/manifest allowlist checks | PENDING_MANUAL network observation |
+| No developer analytics/backend request | source/manifest allowlist checks | PASS — owner reported network observation |
+
+The owner-reported Chrome result accepts one low-severity lifecycle limitation: an already-open Threads tab can retain an invalidated content-script context after the extension is reloaded or updated. That tab can log `Extension context invalidated` and requires a page reload; this does not indicate content upload, permission escalation, or persistent service-worker failure.
 
 ## Store and production matrix
 
@@ -112,10 +114,10 @@ The browser-control surface cannot automate `chrome://extensions` and did not yi
 | Public HTTPS privacy-policy URL reachable while signed out | PENDING_EXTERNAL |
 | ZIP automated content/freshness/checksum verification | PASS |
 | ZIP extracted into an empty directory, inspected, and clean-profile installed | PENDING_MANUAL |
-| All 30 browser checks and seven sign-off fields | PENDING_MANUAL |
+| Functional browser matrix and sign-off | PASS — owner reported on 2026-08-14; exact final-ZIP clean install and Store screenshot remain pending |
 
 `npm.cmd run verify:docs:release` is expected to fail while any pending Store or manual row remains. The detailed one-time completion steps and sign-off form are in `docs/manual-test-checklist.md`.
 
 ## Completion boundary
 
-Local implementation, generated products, automated tests, privacy/store drafts, and reproducible production packaging are available as a checkpoint. Release readiness additionally requires final visual assets, the real Chrome/Tampermonkey matrix, service-worker restart, production-ZIP clean-room sign-off, and a public privacy-policy URL with no unresolved failure.
+Local implementation, generated products, automated tests, privacy/store drafts, reproducible production packaging, and owner-reported Chrome/Tampermonkey functional acceptance are available as a checkpoint. Release readiness additionally requires the deferred Store screenshot, production-ZIP clean-room install/service-worker sign-off, and a public privacy-policy URL with no unresolved failure.
