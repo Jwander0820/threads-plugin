@@ -12,12 +12,15 @@ const ROUTES = new Map([
     ['/content.js', resolve(ROOT, 'dist/chrome-extension/content.js')],
     ['/options.js', resolve(ROOT, 'dist/chrome-extension/options.js')],
     ['/options.css', resolve(ROOT, 'dist/chrome-extension/options.css')],
+    ['/icons/icon-32.png', resolve(ROOT, 'dist/chrome-extension/icons/icon-32.png')],
+    ['/icons/icon-128.png', resolve(ROOT, 'dist/chrome-extension/icons/icon-128.png')],
     ['/privacy.html', resolve(ROOT, 'dist/chrome-extension/privacy.html')]
 ]);
 const MIME = {
     '.css': 'text/css; charset=utf-8',
     '.html': 'text/html; charset=utf-8',
-    '.js': 'text/javascript; charset=utf-8'
+    '.js': 'text/javascript; charset=utf-8',
+    '.png': 'image/png'
 };
 
 const server = createServer(async (request, response) => {
@@ -45,7 +48,7 @@ const server = createServer(async (request, response) => {
         response.writeHead(200, {
             'content-type': MIME[extension] || 'application/octet-stream',
             'cache-control': 'no-store',
-            'content-security-policy': "default-src 'self'; img-src https://*.cdninstagram.com data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+            'content-security-policy': "default-src 'self'; img-src 'self' https://*.cdninstagram.com data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
         });
         response.end(body);
     } catch (error) {
