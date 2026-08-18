@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { bootstrapChromeContent } from '../../src/chrome/content-entry.js';
+import {
+    bootstrapChromeContent,
+    isExtensionContextInvalidatedError,
+    reportContentError
+} from '../../src/chrome/content-entry.js';
 import {
     acceptPageDisclosure,
     declineOrRevokeConsent,
@@ -67,6 +71,24 @@ function fixture(initialConsent = acceptPageDisclosure()) {
         ,postedMessages
     };
 }
+
+test('extension reload invalidation is silent while unrelated content errors remain visible', () => {
+    const logged = [];
+    const logger = { error(...args) { logged.push(args); } };
+
+    assert.equal(isExtensionContextInvalidatedError(new Error('Extension context invalidated.')), true);
+    assert.equal(isExtensionContextInvalidatedError('Extension context invalidated'), true);
+    assert.equal(reportContentError('route sync failed', new Error('Extension context invalidated.'), logger), false);
+    assert.equal(logged.length, 0);
+
+    const unexpected = new Error('capture_sync_failed:internal_error');
+    assert.equal(reportContentError('route sync failed', unexpected, logger), true);
+    assert.deepEqual(logged, [[
+        '[Threads Plugin]',
+        'route sync failed',
+        unexpected
+    ]]);
+});
 
 test('disabling only advanced capture posts STOP immediately while lifecycle work is blocked', async () => {
     const acceptedCapture = setNetworkCaptureConsent(acceptPageDisclosure(), true);

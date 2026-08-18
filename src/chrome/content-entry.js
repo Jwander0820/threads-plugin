@@ -13,6 +13,17 @@ const CAPTURE_MARKER = 'threads-plugin-capture';
 const CAPTURE_VERSION = 1;
 let fallbackRouteGeneration = 0;
 
+export function isExtensionContextInvalidatedError(error) {
+    const message = typeof error === 'string' ? error : error?.message;
+    return typeof message === 'string' && /^Extension context invalidated\.?$/i.test(message.trim());
+}
+
+export function reportContentError(label, error, logger = console) {
+    if (isExtensionContextInvalidatedError(error)) return false;
+    logger.error('[Threads Plugin]', label, error);
+    return true;
+}
+
 function createRouteGeneration(environment) {
     try {
         const bytes = new Uint8Array(16);
@@ -230,7 +241,7 @@ export async function bootstrapChromeContent(environment = globalThis, dependenc
         if (!canCaptureNetwork(nextConsent) || !decision.startRuntime) forceCaptureDormant();
         if (!decision.startRuntime) {
             if (runtime) void emergencyStopRuntime().catch((error) => {
-                console.error('[Threads Plugin]', 'immediate stop failed', error);
+                reportContentError('immediate stop failed', error);
             });
         }
         return lifecycle.update(nextConsent);
@@ -240,7 +251,7 @@ export async function bootstrapChromeContent(environment = globalThis, dependenc
     const unsubscribeConsent = platform.subscribeConsent((nextConsent) => {
         receivedConsentChange = true;
         void requestReconcile(nextConsent).catch((error) => {
-            console.error('[Threads Plugin]', 'consent sync failed', error);
+            reportContentError('consent sync failed', error);
         });
     });
 
@@ -254,11 +265,11 @@ export async function bootstrapChromeContent(environment = globalThis, dependenc
         if (!decision.startRuntime) {
             forceCaptureDormant();
             if (runtime) void emergencyStopRuntime().catch((error) => {
-                console.error('[Threads Plugin]', 'route stop failed', error);
+                reportContentError('route stop failed', error);
             });
         }
         void lifecycle.refresh().catch((error) => {
-            console.error('[Threads Plugin]', 'route sync failed', error);
+            reportContentError('route sync failed', error);
         });
     };
     const routeTimer = environment.window.setInterval(reconcileRoute, 50);
@@ -271,7 +282,7 @@ export async function bootstrapChromeContent(environment = globalThis, dependenc
         if (!decision.startRuntime) {
             forceCaptureDormant();
             if (runtime) void emergencyStopRuntime().catch((error) => {
-                console.error('[Threads Plugin]', 'navigation stop failed', error);
+                reportContentError('navigation stop failed', error);
             });
         } else if (bridgeEnabled) {
             // Invalidate in-flight captures before a safe SPA navigation commits.
@@ -318,6 +329,6 @@ export async function bootstrapChromeContent(environment = globalThis, dependenc
 
 if (!IS_NODE_RUNTIME) {
     bootstrapChromeContent().catch((error) => {
-        console.error('[Threads Plugin]', 'content bootstrap failed', error);
+        reportContentError('content bootstrap failed', error);
     });
 }
