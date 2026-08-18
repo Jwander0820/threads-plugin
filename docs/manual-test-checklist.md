@@ -33,7 +33,7 @@ The automated restart integration reconstructs a fresh worker instance, reconcil
 - PASS — no page-console error was recorded during the tested picker, download, sensitive-route, and return flow.
 
 ## A. Clean-profile install
-- PASS — `docs/store-assets/screenshot-01.png` 至 `screenshot-03.png` 已定版並確認為 1280×800 PNG；440×280 promotional tile 與正式 icon 亦已完成。
+- PASS — 三張中文及兩張英文 Store screenshot 已定版並確認為 1280×800 PNG；440×280 promotional tile 與正式 icon 亦已完成。
 
 - [x] Create a new Chrome profile with no Tampermonkey and no other Threads extensions. — Owner-reported PASS on 2026-08-18.
 - [x] Record the freshly verified production ZIP SHA-256, then open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select only the new empty-directory extraction of that exact ZIP. — PASS with SHA-256 `603b7d29836a005cb812f9ab7e120e45d014054e85bb4c313cfc3d08f16e79e0`.
@@ -67,7 +67,7 @@ Repeat on home feed, following feed, profile, single-post detail, replies where 
 - [x] Open the native Threads share menu and use the injected clean-link action; verify it targets the same post, including quoted posts.
 - [x] Navigate between posts without full reload; verify old route media never appears in the new post picker.
 - [x] At 200% zoom and keyboard-only navigation, verify disclosure, options, picker modal, buttons, focus rings, and Escape/close behavior remain usable.
-- [x] Save at least one accurate 1280×800 or 640×400 Store screenshot as `docs/store-assets/screenshot-01.png`. — Three finalized 1280×800 screenshots are archived in `docs/store-assets/` and passed local dimension/content review.
+- [x] Save at least one accurate 1280×800 or 640×400 Store screenshot as `docs/store-assets/screenshot-01.png`. — Five finalized 1280×800 screenshots, including two English listing variants, are archived in `docs/store-assets/` and passed local dimension/content review.
 
 Items in this section are owner-reported PASS for both the Chrome Extension and Tampermonkey 5.1.0 functional acceptance run.
 

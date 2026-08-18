@@ -1,8 +1,16 @@
 import { acceptPageDisclosure, declineOrRevokeConsent } from '../shared/consent-state.js';
+import { getExtensionMessage } from './i18n.js';
 
 const DISCLOSURE_ID = 'threads-plugin-disclosure-v1';
 
-export function showDisclosure({ document, onAccept, onDecline }) {
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (character) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[character]);
+}
+
+export function showDisclosure({ document, onAccept, onDecline, getMessage = getExtensionMessage }) {
+    const message = (key) => escapeHtml(getMessage(key));
     document.getElementById(DISCLOSURE_ID)?.remove();
     const root = document.createElement('div');
     root.id = DISCLOSURE_ID;
@@ -12,12 +20,12 @@ export function showDisclosure({ document, onAccept, onDecline }) {
     root.innerHTML = `
       <div class="tp-disclosure-card">
         <p class="tp-disclosure-kicker">THREADS PLUGIN</p>
-        <h2 id="${DISCLOSURE_ID}-title">先決定是否允許頁面內容處理</h2>
-        <p>啟用後，擴充功能會在本機讀取 Threads 貼文文字、連結與媒體 URL，並加入下載及複製按鈕。資料不會傳送到開發者伺服器。</p>
-        <p><strong>進階網路回應擷取目前維持關閉。</strong>之後若要啟用，會在設定頁另行說明並徵求同意。</p>
+        <h2 id="${DISCLOSURE_ID}-title">${message('disclosureHeading')}</h2>
+        <p>${message('disclosureIntro')}</p>
+        <p><strong>${message('disclosureAdvancedStrong')}</strong>${message('disclosureAdvancedBody')}</p>
         <div class="tp-disclosure-actions">
-          <button type="button" data-action="accept">同意並啟用</button>
-          <button type="button" data-action="decline">暫不啟用</button>
+          <button type="button" data-action="accept">${message('disclosureAccept')}</button>
+          <button type="button" data-action="decline">${message('disclosureDecline')}</button>
         </div>
       </div>`;
     const style = document.createElement('style');

@@ -106,7 +106,8 @@ for (const [entryPoint, outputName] of [
     ['src/chrome/content-entry.js', 'content.js'],
     ['src/chrome/service-worker.js', 'service-worker.js'],
     ['src/chrome/main-world-capture.js', 'main-world-capture.js'],
-    ['src/chrome/options-entry.js', 'options.js']
+    ['src/chrome/options-entry.js', 'options.js'],
+    ['src/chrome/static-localization-entry.js', 'static-localization.js']
 ]) {
     const [actualBundle, expectedBundle] = await Promise.all([
         readFile(resolve(EXTENSION_OUTPUT, outputName), 'utf8'),
@@ -120,7 +121,13 @@ for (const [entryPoint, outputName] of [
     }
 }
 
-for (const staticPath of ['options.html', 'options.css', 'privacy.html']) {
+for (const staticPath of [
+    'options.html',
+    'options.css',
+    'privacy.html',
+    '_locales/zh_TW/messages.json',
+    '_locales/en/messages.json'
+]) {
     const [sourceBytes, builtBytes] = await Promise.all([
         readFile(resolve(REPOSITORY_ROOT, 'extension', staticPath)),
         readFile(resolve(EXTENSION_OUTPUT, staticPath))

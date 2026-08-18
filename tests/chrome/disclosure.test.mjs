@@ -39,8 +39,18 @@ test('disclosure ignores synthetic clicks and accepts trusted clicks', async () 
     showDisclosure({
         document: fixture.document,
         onAccept: async () => { accepted += 1; },
-        onDecline: async () => {}
+        onDecline: async () => {},
+        getMessage: (key) => ({
+            disclosureHeading: 'Choose Whether to Allow Page Content Processing',
+            disclosureIntro: 'Local processing only.',
+            disclosureAdvancedStrong: 'Advanced capture remains off. ',
+            disclosureAdvancedBody: 'Separate consent is required.',
+            disclosureAccept: 'Agree and Enable',
+            disclosureDecline: 'Not Now'
+        })[key]
     });
+    assert.match(fixture.root.innerHTML, /Choose Whether to Allow Page Content Processing/);
+    assert.match(fixture.root.innerHTML, /Agree and Enable/);
     const listener = fixture.listeners.get('[data-action="accept"]:click');
     listener({ isTrusted: false });
     await Promise.resolve();

@@ -6,6 +6,7 @@ import {
     setNetworkCaptureConsent
 } from '../shared/consent-state.js';
 import { DEFAULT_OPTIONS, normalizeOptions } from '../shared/options.js';
+import { getExtensionMessage } from './i18n.js';
 import { createChromePlatformAdapter } from './platform-adapter.js';
 
 const IS_NODE_RUNTIME = typeof process !== 'undefined' && process.release?.name === 'node';
@@ -34,6 +35,7 @@ export function consumeNetworkDisclosureConfirmation(dialog) {
 if (!IS_NODE_RUNTIME) {
 const platform = createChromePlatformAdapter(globalThis);
 const byId = (id) => document.getElementById(id);
+const message = (key, substitutions) => getExtensionMessage(key, substitutions);
 
 function readForm() {
     return normalizeOptions({
@@ -58,7 +60,7 @@ async function refreshConsent() {
     const consent = normalizeConsentState(await platform.loadConsent());
     const enabled = canProcessPage(consent);
     const status = byId('consent-status');
-    status.textContent = enabled ? '已同意，頁面功能會啟動' : '尚未同意，擴充功能保持休眠';
+    status.textContent = message(enabled ? 'consentStatusEnabled' : 'consentStatusDisabled');
     status.classList.toggle('active', enabled);
     byId('enable-page-processing').disabled = enabled;
     byId('revoke-consent').disabled = !enabled;
@@ -70,7 +72,7 @@ byId('options-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     await platform.saveOptions(readForm());
     const status = byId('save-status');
-    status.textContent = '已儲存';
+    status.textContent = message('savedStatus');
     window.setTimeout(() => { status.textContent = ''; }, 1800);
 });
 
@@ -78,7 +80,7 @@ byId('reset-options').addEventListener('click', async (event) => {
     if (!event.isTrusted) return;
     writeForm(DEFAULT_OPTIONS);
     await platform.saveOptions(DEFAULT_OPTIONS);
-    byId('save-status').textContent = '已還原預設值';
+    byId('save-status').textContent = message('defaultsRestoredStatus');
 });
 
 byId('enable-page-processing').addEventListener('click', async (event) => {
@@ -111,7 +113,7 @@ byId('network-disclosure').addEventListener('close', async () => {
     const consent = await platform.loadConsent();
     await platform.saveConsent(setNetworkCaptureConsent(consent, true));
     await refreshConsent();
-    byId('save-status').textContent = '進階擷取已啟用；若目前 Threads 分頁曾停用或撤銷過進階擷取，請重新載入該分頁。';
+    byId('save-status').textContent = message('networkCaptureEnabledStatus');
 });
 
 async function bootstrapOptionsPage() {
@@ -122,6 +124,6 @@ async function bootstrapOptionsPage() {
 }
 
 void bootstrapOptionsPage().catch((error) => {
-    byId('save-status').textContent = `設定載入失敗：${error.message}`;
+    byId('save-status').textContent = message('settingsLoadFailedStatus', [error.message]);
 });
 }

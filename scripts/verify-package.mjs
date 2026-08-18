@@ -12,8 +12,9 @@ const zipPath = resolve(ARTIFACTS_DIR, `threads-plugin-chrome-${version}.zip`);
 const checksumPath = `${zipPath}.sha256`;
 const expectedFiles = new Set([
     'manifest.json', 'content.js', 'main-world-capture.js', 'service-worker.js',
-    'options.html', 'options.css', 'options.js', 'privacy.html',
-    'icons/icon-16.png', 'icons/icon-32.png', 'icons/icon-48.png', 'icons/icon-128.png'
+    'options.html', 'options.css', 'options.js', 'privacy.html', 'static-localization.js',
+    'icons/icon-16.png', 'icons/icon-32.png', 'icons/icon-48.png', 'icons/icon-128.png',
+    '_locales/zh_TW/messages.json', '_locales/en/messages.json'
 ]);
 async function readZipEntries(path) {
     return new Promise((resolvePromise, reject) => {
@@ -63,6 +64,21 @@ async function readZipEntries(path) {
     const manifest = JSON.parse(entries.get('manifest.json')?.toString('utf8') || 'null');
     if (manifest.manifest_version !== 3 || manifest.version !== version) {
         throw new Error('packaged manifest version mismatch');
+    }
+    if (manifest.default_locale !== 'en' ||
+        manifest.name !== '__MSG_extensionName__' ||
+        manifest.description !== '__MSG_extensionDescription__') {
+        throw new Error('packaged manifest localization mismatch');
+    }
+    const zhMessages = JSON.parse(entries.get('_locales/zh_TW/messages.json')?.toString('utf8') || 'null');
+    const enMessages = JSON.parse(entries.get('_locales/en/messages.json')?.toString('utf8') || 'null');
+    if (zhMessages.extensionName?.message !== 'Threads Plugin - 去除追蹤連結與圖文保存工具' ||
+        zhMessages.extensionDescription?.message !== '下載 Threads 貼文圖片與影片、複製貼文文字或移除追蹤參數的乾淨連結') {
+        throw new Error('packaged Traditional Chinese metadata mismatch');
+    }
+    if (enMessages.extensionName?.message !== 'Threads Plugin - Clean Links & Media Saver' ||
+        enMessages.extensionDescription?.message !== 'Download images and videos from Threads posts, copy post text, or copy clean links with tracking parameters removed.') {
+        throw new Error('packaged English metadata mismatch');
     }
     for (const requiredFile of expectedFiles) {
         if (!entries.get(requiredFile)?.length) throw new Error(`missing packaged file: ${requiredFile}`);

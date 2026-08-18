@@ -10,11 +10,11 @@
 
 ## 名稱
 
-Threads Plugin
+Threads Plugin - 去除追蹤連結與圖文保存工具
 
 ## 簡短說明（zh-TW）
 
-在 Threads 下載貼文圖片與影片，並複製貼文文字或移除追蹤參數的乾淨連結；所有頁面處理都需明確同意。
+下載 Threads 貼文圖片與影片、複製貼文文字或移除追蹤參數的乾淨連結
 
 ## 詳細說明（zh-TW）
 
@@ -40,15 +40,51 @@ Productivity
 
 ## 語言
 
-主要：繁體中文（`zh-TW`）
+主要受眾：繁體中文（`zh-TW`）
 
-次要文件：英文
+套件回退語言：英文（`en`）；未提供其他地區翻譯時顯示英文名稱與摘要。
+
+Chrome 套件的首次內容處理同意提示、功能與隱私設定頁、動態狀態訊息、進階擷取確認視窗及 packaged 隱私政策皆提供繁體中文與英文；其他語言回退英文。
 
 ### English localization copy
 
-Short description: Download Threads media and copy post text or clean links with explicit privacy controls.
+Name: Threads Plugin - Clean Links & Media Saver
 
-Detailed description: Threads Plugin provides user-invoked tools to download images or videos from Threads posts, batch-download selected post media, copy post text, and copy clean post links. Page-content processing requires explicit consent. Optional allowlisted network-response capture is separately disclosed and disabled by default. Disabling or revoking it authoritatively stops and permanently locks the MAIN controller for the current document, so page code or reinjection cannot restart capture; re-enabling it in the same open tab requires a reload or new document. There is no developer backend, analytics, advertising, tracking, or sale of user data. The extension is not affiliated with Meta, Instagram, or Threads.
+Short description: Download images and videos from Threads posts, copy post text, and copy clean links without known tracking parameters.
+
+Detailed description:
+
+Threads Plugin adds user-invoked export tools directly to Threads posts.
+
+Main features:
+
+- Download individual images or videos.
+- Select media from a post and batch-download selected items.
+- Copy the text of a Threads post.
+- Copy a clean post link with known tracking parameters removed.
+- Access a clean-link action alongside the native Threads sharing controls.
+
+Privacy-first processing
+
+Threads Plugin remains dormant until you accept the page-content disclosure. Before consent, it does not scan post content or activate optional network-response capture.
+
+After consent, the extension processes only the information needed to provide its post-export features. This may include post text, post and media URLs, public author identifiers, post identifiers, media types, necessary page structure, and user actions required to operate the controls. Processing takes place locally in your browser.
+
+Optional advanced media capture
+
+Advanced network-response capture is a separate option that is disabled by default and requires an additional confirmation. When enabled, it inspects only allowlisted Threads feed and post responses on supported, non-sensitive routes to improve media detection.
+
+Raw response bodies are not sent to the extension service worker, the developer, or an external server. You may disable advanced capture independently or revoke all consent at any time. Re-enabling advanced capture in an already-open tab requires reloading the page or opening a new document.
+
+No tracking or developer backend
+
+Threads Plugin has no developer-operated backend, analytics, advertising, or user tracking, and it does not sell user data.
+
+When you request a download, Chrome contacts the media file's existing approved Threads, Instagram, or related CDN host over HTTPS. When you copy post text or a clean link, the selected content is written to your operating-system clipboard.
+
+The extension remains inactive on sensitive routes such as login, direct messages, account, privacy, security, and settings pages.
+
+Threads Plugin is not affiliated with, endorsed by, or sponsored by Meta, Instagram, or Threads.
 
 ## Support URL
 
@@ -119,12 +155,12 @@ Dashboard certifications 全部應與程式碼及公開政策一致：
 ## Asset checklist
 
 - **必需 — 128×128 Store／extension icon:** `extension/icon.svg` 是由設計者提供的 `ThreadsPlugin_org.svg` 正式向量原檔副本，`extension/icons/icon-128.png` 是 Store／extension 使用的正式輸出；16、32、48 px 版本由同一原檔產生。
-- **必需 — 至少一張 screenshot:** `docs/store-assets/screenshot-01.png` 至 `screenshot-03.png` 均為已定版的 1280×800 PNG，分別呈現功能總覽、真實 Threads 操作位置，以及功能與隱私設定。
+- **必需 — 至少一張 screenshot:** `docs/store-assets/screenshot-01.png` 至 `screenshot-03.png` 是中文版素材；`screenshot-01-en.png` 與 `screenshot-03-en.png` 是英文功能總覽及英文功能與隱私設定。五張皆為已定版的 1280×800 PNG。
 - **必需 — 440×280 small promotional tile:** `store-assets/promo-tile-source.png` 是設計者提供的正式 raster source，建置後輸出為 `docs/store-assets/small-promo-440x280.png`；Dashboard 上傳前仍須人工確認實際預覽沒有裁切。
 - **選用 — 1400×560 marquee image:** 只有完成品牌與內容審查後才上傳。
 - Manifest／toolbar icons：16×16、32×32、48×48、128×128 均已 packaged。
 
-三張最終 screenshot 已完成尺寸與內容核對，未包含私密貼文或憑證；Dashboard 上傳後仍須確認預覽沒有裁切、模糊或色彩異常。
+五張最終 screenshot 已完成尺寸與內容核對，未包含私密貼文或憑證；Dashboard 上傳後仍須確認預覽沒有裁切、模糊或色彩異常。
 
 ## Distribution draft
 

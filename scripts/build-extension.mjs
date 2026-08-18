@@ -65,11 +65,13 @@ export async function buildExtension() {
         bundle('src/chrome/service-worker.js', 'service-worker.js'),
         bundle('src/chrome/main-world-capture.js', 'main-world-capture.js'),
         bundle('src/chrome/options-entry.js', 'options.js'),
+        bundle('src/chrome/static-localization-entry.js', 'static-localization.js'),
         writeFile(resolve(EXTENSION_OUTPUT, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8'),
         copyFile(resolve(REPOSITORY_ROOT, 'extension', 'options.html'), resolve(EXTENSION_OUTPUT, 'options.html')),
         copyFile(resolve(REPOSITORY_ROOT, 'extension', 'options.css'), resolve(EXTENSION_OUTPUT, 'options.css')),
-        copyFile(resolve(REPOSITORY_ROOT, 'extension', 'privacy.html'), resolve(EXTENSION_OUTPUT, 'privacy.html'))
-        ,cp(resolve(REPOSITORY_ROOT, 'extension', 'icons'), resolve(EXTENSION_OUTPUT, 'icons'), { recursive: true })
+        copyFile(resolve(REPOSITORY_ROOT, 'extension', 'privacy.html'), resolve(EXTENSION_OUTPUT, 'privacy.html')),
+        cp(resolve(REPOSITORY_ROOT, 'extension', 'icons'), resolve(EXTENSION_OUTPUT, 'icons'), { recursive: true }),
+        cp(resolve(REPOSITORY_ROOT, 'extension', '_locales'), resolve(EXTENSION_OUTPUT, '_locales'), { recursive: true })
     ]);
     return EXTENSION_OUTPUT;
 }

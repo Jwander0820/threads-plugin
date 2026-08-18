@@ -110,7 +110,7 @@ The owner-reported Chrome result accepts one low-severity lifecycle limitation: 
 | Privacy policy source and packaged page match implementation | PASS |
 | Permission rationale, single purpose, data mapping, reviewer steps, and unaffiliated notice | PASS |
 | Final icon and 440×280 promotional tile | PASS — icon uses designer-supplied `ThreadsPlugin_org.svg`; promo uses the separately supplied raster source and deterministically exports at 440×280 |
-| One to five screenshots from the final installed product | PASS — three finalized 1280×800 screenshots passed local dimension/content review |
+| One to five screenshots from the final installed product | PASS — five finalized 1280×800 screenshots, including two English listing variants, passed local dimension/content review |
 | Public HTTPS privacy-policy URL reachable while signed out | PASS — public `main` policy returned HTTP 200 without authentication on 2026-08-18 |
 | ZIP automated content/freshness/checksum verification | PASS |
 | ZIP extracted into an empty directory, inspected, and clean-profile installed | PASS — owner reported against SHA-256 `603b7d29836a005cb812f9ab7e120e45d014054e85bb4c313cfc3d08f16e79e0` on 2026-08-18 |

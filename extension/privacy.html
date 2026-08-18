@@ -3,50 +3,51 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Threads Plugin 隱私權政策</title>
+  <title data-i18n="privacyPageTitle">Threads Plugin 隱私權政策</title>
   <link rel="stylesheet" href="options.css">
 </head>
 <body>
   <main>
     <header>
       <p class="eyebrow">PRIVACY · 2026-08-13</p>
-      <h1>隱私權政策</h1>
-      <p>Threads Plugin 在你的瀏覽器內提供由使用者主動操作的 Threads 媒體下載、貼文文字與乾淨連結複製功能。擴充功能沒有開發者後端、analytics、廣告或追蹤。</p>
+      <h1 data-i18n="privacyHeading">隱私權政策</h1>
+      <p data-i18n="privacyIntro">Threads Plugin 在你的瀏覽器內提供由使用者主動操作的 Threads 媒體下載、貼文文字與乾淨連結複製功能。擴充功能沒有開發者後端、analytics、廣告或追蹤。</p>
     </header>
     <section>
-      <h2>處理的資料</h2>
-      <p>只有在你同意頁面內容處理後，才會處理目前支援的 Threads 頁面上的貼文文字、使用者產生內容、貼文連結、目前路由、公開作者名稱／識別碼、貼文代碼、媒體 URL／類型、顯示控制項所需的 DOM 資訊，以及完成使用者操作所需的可信任 click、pointer、scroll 與 keyboard 事件。</p>
-      <p>擴充功能不讀取 Threads 密碼、驗證 Cookie、付款資訊或私訊內容。登入、帳號、challenge、私訊、OAuth、安全、隱私與設定等敏感路徑不啟動頁面 runtime。</p>
-      <p>進階網路回應擷取另需獨立 opt-in，預設關閉；只檢查 allowlist 內的 feed/post GraphQL 回應。有界同頁 bridge 會把通過驗證的貼文代碼、媒體類型與 URL、來源路由、allowlist operation 名稱及隨機防重播協定資訊傳回 isolated content context。原始回應不會傳到 service worker、開發者或外部伺服器。</p>
+      <h2 data-i18n="privacyDataHeading">處理的資料</h2>
+      <p data-i18n="privacyDataP1">只有在你同意頁面內容處理後，才會處理目前支援的 Threads 頁面上的貼文文字、使用者產生內容、貼文連結、目前路由、公開作者名稱／識別碼、貼文代碼、媒體 URL／類型、顯示控制項所需的 DOM 資訊，以及完成使用者操作所需的可信任 click、pointer、scroll 與 keyboard 事件。</p>
+      <p data-i18n="privacyDataP2">擴充功能不讀取 Threads 密碼、驗證 Cookie、付款資訊或私訊內容。登入、帳號、challenge、私訊、OAuth、安全、隱私與設定等敏感路徑不啟動頁面 runtime。</p>
+      <p data-i18n="privacyDataP3">進階網路回應擷取另需獨立 opt-in，預設關閉；只檢查 allowlist 內的 feed/post GraphQL 回應。有界同頁 bridge 會把通過驗證的貼文代碼、媒體類型與 URL、來源路由、allowlist operation 名稱及隨機防重播協定資訊傳回 isolated content context。原始回應不會傳到 service worker、開發者或外部伺服器。</p>
     </section>
     <section>
-      <h2>資料使用與分享</h2>
-      <p>資料只用於擴充功能的單一目的：你主動要求的 Threads 貼文媒體下載、貼文文字或乾淨連結複製，以及本機媒體排序、貼文／路由隔離、UI 顯示、同意與安全限制。Threads Plugin 不出售資料，不用於廣告、profiling、信用或貸款判定，也不讓開發者或其他人員讀取。</p>
-      <p>擴充功能不把頁面內容或媒體記錄送給開發者或無關的 analytics、廣告、追蹤服務。下載時，Chrome 會向所選媒體原有且已核准的 Threads／Instagram／CDN Instagram／FBCDN host 發出必要的 HTTPS 請求；該 host 會收到傳回檔案所需的一般請求。除此之外沒有外部傳輸。</p>
+      <h2 data-i18n="privacyUseHeading">資料使用與分享</h2>
+      <p data-i18n="privacyUseP1">資料只用於擴充功能的單一目的：你主動要求的 Threads 貼文媒體下載、貼文文字或乾淨連結複製，以及本機媒體排序、貼文／路由隔離、UI 顯示、同意與安全限制。Threads Plugin 不出售資料，不用於廣告、profiling、信用或貸款判定，也不讓開發者或其他人員讀取。</p>
+      <p data-i18n="privacyUseP2">擴充功能不把頁面內容或媒體記錄送給開發者或無關的 analytics、廣告、追蹤服務。下載時，Chrome 會向所選媒體原有且已核准的 Threads／Instagram／CDN Instagram／FBCDN host 發出必要的 HTTPS 請求；該 host 會收到傳回檔案所需的一般請求。除此之外沒有外部傳輸。</p>
     </section>
     <section>
-      <h2>儲存與保留</h2>
-      <p><code>chrome.storage.local</code> 只保存正規化後的功能／時間選項與 consent state，不保存貼文文字、媒體 URL、瀏覽紀錄、Cookie、憑證、analytics 識別碼或下載內容。</p>
-      <p>解析的文字、連結與媒體記錄可能在已同意 runtime 運作期間留在目前分頁記憶體；貼文與路由識別檢查避免舊記錄被當成另一貼文或路由使用。撤銷同意、runtime 停止（包含進入敏感路徑）或關閉分頁時會清除，且擴充功能不會持久化這些記錄。</p>
-      <p>你要求複製的文字或連結會寫入作業系統剪貼簿，依作業系統／剪貼簿管理器設定保留。下載 URL、檔名、Chrome 下載紀錄與下載檔案則依 Chrome 與作業系統設定保留。</p>
+      <h2 data-i18n="privacyRetentionHeading">儲存與保留</h2>
+      <p><code>chrome.storage.local</code> <span data-i18n="privacyRetentionP1">只保存正規化後的功能／時間選項與 consent state，不保存貼文文字、媒體 URL、瀏覽紀錄、Cookie、憑證、analytics 識別碼或下載內容。</span></p>
+      <p data-i18n="privacyRetentionP2">解析的文字、連結與媒體記錄可能在已同意 runtime 運作期間留在目前分頁記憶體；貼文與路由識別檢查避免舊記錄被當成另一貼文或路由使用。撤銷同意、runtime 停止（包含進入敏感路徑）或關閉分頁時會清除，且擴充功能不會持久化這些記錄。</p>
+      <p data-i18n="privacyRetentionP3">你要求複製的文字或連結會寫入作業系統剪貼簿，依作業系統／剪貼簿管理器設定保留。下載 URL、檔名、Chrome 下載紀錄與下載檔案則依 Chrome 與作業系統設定保留。</p>
     </section>
     <section>
-      <h2>控制與撤銷</h2>
-      <p>同意前擴充功能保持休眠；你可以拒絕而不被重複提示、稍後從設定頁啟用、獨立停用進階擷取，或撤銷全部同意。撤銷後，已開啟的 Threads 分頁會停止 runtime、移除加入的 UI、停止 MAIN wrapper、移除同頁 bridge listener、取消註冊未來的 MAIN capture，且重新同意前不再處理頁面。</p>
-      <p>停用進階擷取或撤銷全部同意時，service worker 也會在每個已開啟分頁的 MAIN world 執行終止性撤銷：立即還原 fetch/XHR wrapper，並永久鎖定目前 document 的 controller，因此頁面程式或再次注入都無法重啟擷取。若在同一既開分頁重新啟用進階擷取，必須重新載入分頁或開啟新 document；一般 DOM 工具仍獨立依頁面內容同意狀態運作。</p>
+      <h2 data-i18n="privacyControlHeading">控制與撤銷</h2>
+      <p data-i18n="privacyControlP1">同意前擴充功能保持休眠；你可以拒絕而不被重複提示、稍後從設定頁啟用、獨立停用進階擷取，或撤銷全部同意。撤銷後，已開啟的 Threads 分頁會停止 runtime、移除加入的 UI、停止 MAIN wrapper、移除同頁 bridge listener、取消註冊未來的 MAIN capture，且重新同意前不再處理頁面。</p>
+      <p data-i18n="privacyControlP2">停用進階擷取或撤銷全部同意時，service worker 也會在每個已開啟分頁的 MAIN world 執行終止性撤銷：立即還原 fetch/XHR wrapper，並永久鎖定目前 document 的 controller，因此頁面程式或再次注入都無法重啟擷取。若在同一既開分頁重新啟用進階擷取，必須重新載入分頁或開啟新 document；一般 DOM 工具仍獨立依頁面內容同意狀態運作。</p>
     </section>
     <section>
-      <h2>敏感路徑與安全限制</h2>
-      <p>媒體下載 URL 只允許 HTTPS、無帳密、無非預期連接埠、核准的 Threads／Instagram／CDN host 與明確媒體副檔名，並由 service worker 再次驗證。擷取另受精確 operation、路由、schema、記錄數、payload 大小、媒體 URL 與 replay 檢查限制。擴充功能只執行 packaged code，不使用遠端 JavaScript。</p>
+      <h2 data-i18n="privacySecurityHeading">敏感路徑與安全限制</h2>
+      <p data-i18n="privacySecurityP1">媒體下載 URL 只允許 HTTPS、無帳密、無非預期連接埠、核准的 Threads／Instagram／CDN host 與明確媒體副檔名，並由 service worker 再次驗證。擷取另受精確 operation、路由、schema、記錄數、payload 大小、媒體 URL 與 replay 檢查限制。擴充功能只執行 packaged code，不使用遠端 JavaScript。</p>
     </section>
     <section>
-      <h2>Chrome Web Store Limited Use</h2>
-      <p>Threads Plugin 對 Chrome extension APIs 與支援的 Threads 頁面資訊之使用與處理，遵守 <a href="https://developer.chrome.com/docs/webstore/program-policies/user-data-faq/" target="_blank" rel="noreferrer">Chrome Web Store User Data Policy</a>，包括 Limited Use 要求。資訊只用於提供或改善已揭露的單一目的；除提供該目的或政策另行允許外不移轉，不用於個人化廣告，也不供人員閱讀。</p>
+      <h2 data-i18n="privacyLimitedUseHeading">Chrome Web Store Limited Use</h2>
+      <p><span data-i18n="privacyLimitedUseBefore">Threads Plugin 對 Chrome extension APIs 與支援的 Threads 頁面資訊之使用與處理，遵守 </span><a href="https://developer.chrome.com/docs/webstore/program-policies/user-data-faq/" target="_blank" rel="noreferrer">Chrome Web Store User Data Policy</a><span data-i18n="privacyLimitedUseAfter">，包括 Limited Use 要求。資訊只用於提供或改善已揭露的單一目的；除提供該目的或政策另行允許外不移轉，不用於個人化廣告，也不供人員閱讀。</span></p>
     </section>
     <section>
-      <h2>聯絡方式</h2>
-      <p>問題可透過 <a href="https://github.com/Jwander0820/threads-plugin/issues" target="_blank" rel="noreferrer">GitHub Issues</a> 聯絡。請勿在公開 issue 放入私人貼文內容、憑證或其他敏感資訊。政策有重大變更時，會更新本頁日期與版本說明。</p>
+      <h2 data-i18n="privacyContactHeading">聯絡方式</h2>
+      <p><span data-i18n="privacyContactBefore">問題可透過 </span><a href="https://github.com/Jwander0820/threads-plugin/issues" target="_blank" rel="noreferrer">GitHub Issues</a><span data-i18n="privacyContactAfter"> 聯絡。請勿在公開 issue 放入私人貼文內容、憑證或其他敏感資訊。政策有重大變更時，會更新本頁日期與版本說明。</span></p>
     </section>
   </main>
+  <script src="static-localization.js"></script>
 </body>
 </html>
