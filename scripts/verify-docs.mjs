@@ -186,7 +186,7 @@ releaseGate('valid mandatory 440x280 small promotional tile', smallPromoReady);
 
 const manualItems = manualSource.match(/^- \[[ xX]\]/gm) || [];
 const uncheckedManualItems = (manualSource.match(/^- \[ \]/gm) || []).length;
-releaseGate('manual checklist retains all 30 required items', manualItems.length === 30);
+releaseGate('manual checklist retains all 31 required items', manualItems.length === 31);
 releaseGate('all manual checklist items checked', uncheckedManualItems === 0);
 for (const field of [
     'Tester',

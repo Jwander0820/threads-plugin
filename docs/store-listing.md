@@ -1,12 +1,12 @@
 # Chrome Web Store 上架資料草稿
 
-> 本檔提供可貼入 Chrome Web Store Developer Dashboard 的內容與 release gate。公開隱私政策 URL、真實瀏覽器簽核及必需圖片素材仍是明確的外部前置條件；在這些條件完成前不得把本檔視為可送審狀態。
+> 本檔提供可貼入 Chrome Web Store Developer Dashboard 的內容與 release gate。公開隱私政策 URL、必需圖片素材與最終 production ZIP 真實瀏覽器簽核皆已完成；送審前仍須在 Dashboard 核對帳號、privacy、distribution 與 reviewer instructions。
 
 ## Release gate metadata
 
-- Privacy policy public URL status: `PENDING_EXTERNAL`
-- Manual browser sign-off status: `PENDING_MANUAL_VALIDATION`
-- Required store assets status: `PENDING_SCREENSHOT`
+- Privacy policy public URL status: `READY`
+- Manual browser sign-off status: `READY`
+- Required store assets status: `READY`
 
 ## 名稱
 
@@ -60,7 +60,7 @@ https://github.com/Jwander0820/threads-plugin
 
 ## Privacy policy URL
 
-Status: `PENDING_EXTERNAL` — `PRIVACY.md` 尚未存在於目前公開的 `main`，因此下列目標 URL 現在不可當成已完成的 Dashboard 值。必須在另獲 commit/push 或其他公開託管授權後，確認瀏覽器未登入也能透過 HTTPS 開啟，再把 Release gate metadata 改為 `READY`。
+Status: `READY` — 2026-08-18 已確認公開 `main` 上的政策可在未登入狀態透過 HTTPS 讀取，回應為 HTTP 200；Dashboard 應使用下列公開 URL，並在送審前再次核對內容與 `PRIVACY.md` 一致。
 
 https://github.com/Jwander0820/threads-plugin/blob/main/PRIVACY.md
 
@@ -119,12 +119,12 @@ Dashboard certifications 全部應與程式碼及公開政策一致：
 ## Asset checklist
 
 - **必需 — 128×128 Store／extension icon:** `extension/icon.svg` 是由設計者提供的 `ThreadsPlugin_org.svg` 正式向量原檔副本，`extension/icons/icon-128.png` 是 Store／extension 使用的正式輸出；16、32、48 px 版本由同一原檔產生。
-- **必需 — 至少一張 screenshot:** 尚未建立 `docs/store-assets/screenshot-01.png`；必須從真實安裝版本擷取 1280×800（優先）或 640×400 的滿版畫面。
+- **必需 — 至少一張 screenshot:** `docs/store-assets/screenshot-01.png` 至 `screenshot-03.png` 均為已定版的 1280×800 PNG，分別呈現功能總覽、真實 Threads 操作位置，以及功能與隱私設定。
 - **必需 — 440×280 small promotional tile:** `store-assets/promo-tile-source.png` 是設計者提供的正式 raster source，建置後輸出為 `docs/store-assets/small-promo-440x280.png`；Dashboard 上傳前仍須人工確認實際預覽沒有裁切。
 - **選用 — 1400×560 marquee image:** 只有完成品牌與內容審查後才上傳。
 - Manifest／toolbar icons：16×16、32×32、48×48、128×128 均已 packaged。
 
-最終 screenshot 必須呈現送審版本真實體驗（例如首次揭露、貼文控制項、媒體 picker 或 options），不得使用私密貼文、憑證、模糊／拉伸圖片、圓角留白或與現版不一致的 mock。正式 icon、screenshot 與 promotional tile 全部定稿並核對後，才將 Required store assets status 改為 `READY`。
+三張最終 screenshot 已完成尺寸與內容核對，未包含私密貼文或憑證；Dashboard 上傳後仍須確認預覽沒有裁切、模糊或色彩異常。
 
 ## Distribution draft
 

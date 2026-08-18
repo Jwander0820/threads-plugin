@@ -4,7 +4,7 @@
 
 This is the release-owner Go/No-Go ledger for Threads Plugin 5.1.0. A **Go** decision requires all automated gates, every item in `docs/manual-test-checklist.md`, the public privacy-policy URL, current-product Store assets, and the final evidence/sign-off fields to pass against the exact production ZIP. Any unresolved Critical or High finding is an automatic **No-Go**.
 
-Current decision: **NO-GO — implementation candidate passes automated security review; real-browser and external publication gates remain open.**
+Current decision: **LOCAL GO / PUBLICATION NO-GO — automated and owner-reported final-ZIP browser gates pass; Chrome Web Store Dashboard review and explicit upload/submission/publication authorization remain open.**
 
 This file does not authorize commit, push, merge, tag, Release creation, Greasy Fork updates, Chrome Web Store upload, submission, or publication.
 
@@ -12,11 +12,11 @@ This file does not authorize commit, push, merge, tag, Release creation, Greasy 
 
 | Area | Current evidence | Residual risk / release condition |
 | --- | --- | --- |
-| Permission blast radius | MV3 manifest declares only `downloads`, `scripting`, `storage`, and four exact Threads origins; verifiers reject broader permissions | Confirm the installed permission prompt against the production ZIP |
-| Consent and revocation | Two independent consent gates; sensitive routes fail closed; service worker performs terminal MAIN-world revoke; stale async work is generation-bound and aborted | Verify trusted-click disclosure, disable/revoke, same-document lock, reload-to-reenable, and real service-worker restart |
+| Permission blast radius | MV3 manifest declares only `downloads`, `scripting`, `storage`, and four exact Threads origins; verifiers reject broader permissions | PASS — installed production-ZIP permissions owner-confirmed |
+| Consent and revocation | Two independent consent gates; sensitive routes fail closed; service worker performs terminal MAIN-world revoke; stale async work is generation-bound and aborted | PASS — disclosure, disable/revoke, same-document lock, reload-to-reenable, and real service-worker restart owner-confirmed |
 | MAIN-world threat boundary | Frozen controller, immutable ownership key, transactional hook installation, re-entry rejection, exact GraphQL operation allowlist, 2 MiB response ceiling, bounded concurrent inspection, hostile-page stop regression | Observe real Threads GraphQL behavior and confirm no unexpected operation is accepted |
-| Message/download privilege | Same-window bridge validates exact schema, origin, route generation, replay/rate/record/URL limits; service worker revalidates extension sender, top frame, consent, route, media URL/type, and filename | Complete real download and stale-route tests |
-| User-data handling | No developer backend, analytics, advertising, tracking, or content persistence; raw response bodies remain in MAIN; clipboard/download destinations are disclosed | Publish the exact privacy policy at a stable signed-out HTTPS URL and match Dashboard declarations |
+| Message/download privilege | Same-window bridge validates exact schema, origin, route generation, replay/rate/record/URL limits; service worker revalidates extension sender, top frame, consent, route, media URL/type, and filename | PASS — real download and stale-route checks owner-confirmed |
+| User-data handling | No developer backend, analytics, advertising, tracking, or content persistence; raw response bodies remain in MAIN; clipboard/download destinations are disclosed | Public policy is live; Dashboard declarations still require owner review |
 | Remote code / supply chain | All runtime JavaScript is packaged; no `eval`, `new Function`, remote script, or `@require`; production extension has no runtime npm dependency; audit reports zero vulnerabilities | Re-run lockfile audit and artifact checks immediately before submission |
 | Artifact integrity | Build/source freshness gate, 12-file exact ZIP allowlist, byte equality, safe paths, fixed timestamps, deterministic packaging tests | Install and test the exact checksum recorded in `docs/TEST_MATRIX.md` |
 | Store metadata | zh-TW/English copy, permission rationale, data-use mapping, reviewer instructions, required promo asset, and reviewed 1280×800 real-product screenshot | Add public privacy URL, Dashboard account/contact data, and final sign-off |
@@ -56,15 +56,15 @@ Previously identified high-risk lifecycle and consent defects were remediated an
 
 ## Final Go checklist
 
-- [ ] Exact production ZIP installed from a clean extraction and no manifest/service-worker errors.
-- [ ] Chrome v5.1.0 real Threads matrix, security observations, worker restart, 200% zoom, keyboard and screenshot pass.
-- [ ] Tampermonkey generated v5.1.0 real Threads matrix and metadata pass.
-- [ ] No Critical/High finding from the final source, artifact, and live-behavior review.
-- [ ] Public privacy URL is reachable signed out and matches `PRIVACY.md`.
-- [ ] One to five current 1280×800 or 640×400 screenshots and the 440×280 promotional tile pass visual review.
+- [x] Exact production ZIP installed from a clean extraction and no manifest/service-worker errors.
+- [x] Chrome v5.1.0 real Threads matrix, security observations, worker restart, 200% zoom, keyboard and screenshot pass.
+- [x] Tampermonkey generated v5.1.0 real Threads matrix and metadata pass.
+- [x] No Critical/High finding from the final source, artifact, and live-behavior review.
+- [x] Public privacy URL is reachable signed out and matches `PRIVACY.md`.
+- [x] One to five current 1280×800 or 640×400 screenshots and the 440×280 promotional tile pass visual review.
 - [ ] Developer Dashboard privacy, distribution, contact, reviewer instructions, and declarations match this build.
-- [ ] All 30 manual items and seven sign-off fields are complete.
-- [ ] `npm.cmd run verify:docs:release` passes.
+- [x] All 31 manual items and seven sign-off fields are complete.
+- [x] `npm.cmd run verify:docs:release` passes.
 - [ ] Owner separately authorizes any commit/push/upload/submission/publication action.
 
 Until every unchecked item above is satisfied, the executive release decision remains **NO-GO**.

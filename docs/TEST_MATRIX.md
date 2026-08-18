@@ -7,7 +7,7 @@
 - Products: generated Tampermonkey userscript and Manifest V3 Chrome Extension
 - Production archive: `artifacts/threads-plugin-chrome-5.1.0.zip`
 - Automated environment: Windows, Node.js, deterministic local fixture
-- Human environment: signed-in Threads access available; owner-reported Chrome Extension and Tampermonkey 5.1.0 functional acceptance completed on 2026-08-14; exact final-ZIP clean-profile verification remains pending
+- Human environment: signed-in Threads access available; owner-reported Chrome Extension and Tampermonkey 5.1.0 functional acceptance completed, with exact final-ZIP clean-profile and real service-worker restart verification confirmed on 2026-08-18
 
 This file distinguishes executable local evidence from checks that require a real installed extension, live Threads account state, or a public URL. Pending rows are release blockers; they are not skipped or treated as passes.
 
@@ -26,7 +26,7 @@ This file distinguishes executable local evidence from checks that require a rea
 | Generated freshness | `npm.cmd run verify:generated` | PASS — root userscript, manifest, content, MAIN, service worker, and options outputs match source |
 | Dependency audit | `npm.cmd audit --audit-level=high` | PASS — zero vulnerabilities |
 | Production package | `npm.cmd run package:extension` then `npm.cmd run verify:package` | PASS — exact 12-file allowlist, root manifest, safe paths, non-empty entries, and byte equality with build |
-| Reproducibility | package and verify repeated from the same source | PASS — identical SHA-256 `6aa25a6fe45abfa136e8d781abec49b51db61d01e8ae195fdbc7179267482085` |
+| Reproducibility | package and verify repeated from the same source | PASS — final verified SHA-256 `603b7d29836a005cb812f9ab7e120e45d014054e85bb4c313cfc3d08f16e79e0` |
 | Portable project handoff | `npm.cmd run package:handoff` then `npm.cmd run verify:handoff` | PASS — per-file SHA-256 manifest, prohibited paths excluded, deterministic packaging, and clean-directory build/freshness verification |
 | Diff hygiene | `git diff --check` | PASS |
 
@@ -43,7 +43,7 @@ The deterministic performance probe records two MutationObserver callbacks, supp
 | S3 — No broad host permission | manifest exact-host test rejects `<all_urls>` | PASS |
 | S4 — Minimum permissions | manifest exact permission allowlist is `downloads`, `scripting`, `storage` | PASS |
 | S5 — No cookie access | forbidden-permission and source checks; sensitive/private routes dormant | PASS |
-| S6 — No tracking | verifier/source/manifest inspection; live network observation remains in the manual matrix | PASS automated / PENDING_MANUAL observation |
+| S6 — No tracking | verifier/source/manifest inspection plus owner-reported final-ZIP live network observation | PASS |
 | S7 — Bounded network inspection | endpoint, exactly-one-operation, route, MIME, conflict, and allowlist tests | PASS |
 | S8 — Response limit | `NETWORK_RESPONSE_MAX_BYTES` is an absolute 2 MiB ceiling; caller options can only reduce it; declared-size, stream, fetch, and XHR override tests | PASS |
 | S9 — Media URL policy | HTTPS/host/default-port/no-credentials/extension/type adversarial tests | PASS |
@@ -51,10 +51,10 @@ The deterministic performance probe records two MutationObserver callbacks, supp
 | S11 — MAIN is untrusted | MAIN imports no Chrome adapter; bridge accepts normalized records only | PASS |
 | S12 — Service Worker revalidation | sender/tab/frame/route/consent/schema/URL/type/filename negative tests | PASS |
 | S13 — No content persistence | adapter/storage tests and privacy/source inspection limit storage to options/consent | PASS |
-| S14 — Consent before processing | bootstrap/disclosure/content lifecycle tests and local fixture | PASS automated / PENDING_MANUAL real install |
+| S14 — Consent before processing | bootstrap/disclosure/content lifecycle tests, local fixture, and owner-reported final-ZIP real install | PASS |
 | S15 — Bounded bridge | 64 KiB payload, 128 records, 8192-character URL, 80-character post ID, 256 valid messages/60 s, replay LRU 256, listener-before-injection/READY handshake, and route caches bounded to 32 URLs/post and 160 posts | PASS |
 | S16 — Route isolation | content-issued Chrome generation handshake plus synchronous MAIN invalidation, and userscript monotonic route generation; A→B→A fetch/XHR regressions | PASS |
-| S17 — Service Worker restart safety | deterministic worker restart/reconstruction integration and focused contracts | PASS automated / PENDING_MANUAL real Chrome termination/restart |
+| S17 — Service Worker restart safety | deterministic worker restart/reconstruction integration plus owner-reported real Chrome termination/restart | PASS |
 | S18 — Generated/package artifact integrity | source-to-userscript, manifest, and four-bundle freshness gate plus deterministic existing-dist packaging pipeline tests | PASS |
 
 ## Local browser fixture evidence
@@ -97,10 +97,10 @@ The browser-control surface cannot automate `chrome://extensions` and did not yi
 | Login/messages/settings/account routes fail closed | route, content, MAIN, and download tests; fixture `/messages/` | PASS — owner reported |
 | In-flight response work cannot parse or post after stop/route change | abort, content-issued/monotonic generation, A→B→A fetch, and XHR tests | PASS — owner reported |
 | Download message requires valid extension/top-frame/tab/route/consent/media/filename | download-handler adversarial tests | PASS — owner reported |
-| Service-worker restart reconstructs registration and download behavior | deterministic restart/reconstruction integration passes | PENDING_MANUAL real Chrome termination/restart |
+| Service-worker restart reconstructs registration and download behavior | deterministic integration plus owner-reported real Chrome termination/restart | PASS |
 | No developer analytics/backend request | source/manifest allowlist checks | PASS — owner reported network observation |
 
-The owner-reported Chrome result accepts one low-severity lifecycle limitation: an already-open Threads tab can retain an invalidated content-script context after the extension is reloaded or updated. That tab can log `Extension context invalidated` and requires a page reload; this does not indicate content upload, permission escalation, or persistent service-worker failure.
+The owner-reported Chrome result accepts one low-severity lifecycle limitation: an already-open Threads tab can retain an invalidated content-script context after the extension is reloaded or updated. The stale script suppresses Chrome's expected `Extension context invalidated` lifecycle error, but the tab still requires a page reload; this does not indicate content upload, permission escalation, or persistent service-worker failure.
 
 ## Store and production matrix
 
@@ -110,14 +110,14 @@ The owner-reported Chrome result accepts one low-severity lifecycle limitation: 
 | Privacy policy source and packaged page match implementation | PASS |
 | Permission rationale, single purpose, data mapping, reviewer steps, and unaffiliated notice | PASS |
 | Final icon and 440×280 promotional tile | PASS — icon uses designer-supplied `ThreadsPlugin_org.svg`; promo uses the separately supplied raster source and deterministically exports at 440×280 |
-| One to five screenshots from the final installed product | PENDING_FINAL_ASSET — no screenshot is currently present |
-| Public HTTPS privacy-policy URL reachable while signed out | PENDING_EXTERNAL |
+| One to five screenshots from the final installed product | PASS — three finalized 1280×800 screenshots passed local dimension/content review |
+| Public HTTPS privacy-policy URL reachable while signed out | PASS — public `main` policy returned HTTP 200 without authentication on 2026-08-18 |
 | ZIP automated content/freshness/checksum verification | PASS |
-| ZIP extracted into an empty directory, inspected, and clean-profile installed | PENDING_MANUAL |
-| Functional browser matrix and sign-off | PASS — owner reported on 2026-08-14; exact final-ZIP clean install and Store screenshot remain pending |
+| ZIP extracted into an empty directory, inspected, and clean-profile installed | PASS — owner reported against SHA-256 `603b7d29836a005cb812f9ab7e120e45d014054e85bb4c313cfc3d08f16e79e0` on 2026-08-18 |
+| Functional browser matrix and sign-off | PASS — owner-reported final-ZIP acceptance, including real service-worker restart, on 2026-08-18 |
 
-`npm.cmd run verify:docs:release` is expected to fail while any pending Store or manual row remains. The detailed one-time completion steps and sign-off form are in `docs/manual-test-checklist.md`.
+The detailed final browser evidence and sign-off are recorded in `docs/manual-test-checklist.md`; Dashboard submission fields remain an external owner-reviewed step.
 
 ## Completion boundary
 
-Local implementation, generated products, automated tests, privacy/store drafts, reproducible production packaging, and owner-reported Chrome/Tampermonkey functional acceptance are available as a checkpoint. Release readiness additionally requires the deferred Store screenshot, production-ZIP clean-room install/service-worker sign-off, and a public privacy-policy URL with no unresolved failure.
+Local implementation, generated products, automated tests, public privacy policy, final Store assets, reproducible production packaging, and owner-reported Chrome/Tampermonkey final-ZIP acceptance are complete. Remaining work is the external Chrome Web Store Dashboard review, upload, submission, and publication authorization.

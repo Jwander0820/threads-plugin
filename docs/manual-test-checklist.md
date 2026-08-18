@@ -33,11 +33,11 @@ The automated restart integration reconstructs a fresh worker instance, reconcil
 - PASS — no page-console error was recorded during the tested picker, download, sensitive-route, and return flow.
 
 ## A. Clean-profile install
-- MISSING — `docs/store-assets/screenshot-01.png` 尚未建立；icon 與 Store 視覺定稿後，須從真實安裝版本擷取正式 screenshot。
+- PASS — `docs/store-assets/screenshot-01.png` 至 `screenshot-03.png` 已定版並確認為 1280×800 PNG；440×280 promotional tile 與正式 icon 亦已完成。
 
-- [ ] Create a new Chrome profile with no Tampermonkey and no other Threads extensions.
-- [ ] Record the freshly verified production ZIP SHA-256, then open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select only the new empty-directory extraction of that exact ZIP.
-- [ ] Confirm Chrome reports no manifest or service-worker error; from service-worker DevTools stop the worker, reopen Threads/options, perform one download, and confirm the worker restarts, consent persists, dynamic capture registration reconciles, and no error appears.
+- [x] Create a new Chrome profile with no Tampermonkey and no other Threads extensions. — Owner-reported PASS on 2026-08-18.
+- [x] Record the freshly verified production ZIP SHA-256, then open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select only the new empty-directory extraction of that exact ZIP. — PASS with SHA-256 `603b7d29836a005cb812f9ab7e120e45d014054e85bb4c313cfc3d08f16e79e0`.
+- [x] Confirm Chrome reports no manifest or service-worker error; from service-worker DevTools stop the worker, reopen Threads/options, perform one download, and confirm the worker restarts, consent persists, dynamic capture registration reconciles, and no error appears. — Owner-reported PASS on the exact production ZIP.
 - [x] Confirm the extension icon and options page render at normal and 200% zoom. — Owner-reported PASS on the unpacked development extension.
 - [x] Confirm manifest permissions shown by Chrome are limited to downloads, storage, scripting, and the four Threads origins. — Owner-reported PASS.
 
@@ -67,7 +67,7 @@ Repeat on home feed, following feed, profile, single-post detail, replies where 
 - [x] Open the native Threads share menu and use the injected clean-link action; verify it targets the same post, including quoted posts.
 - [x] Navigate between posts without full reload; verify old route media never appears in the new post picker.
 - [x] At 200% zoom and keyboard-only navigation, verify disclosure, options, picker modal, buttons, focus rings, and Escape/close behavior remain usable.
-- [ ] Save at least one accurate 1280×800 or 640×400 Store screenshot as `docs/store-assets/screenshot-01.png`. — Explicitly deferred until after merging to `main` and reviewing the Store submission package.
+- [x] Save at least one accurate 1280×800 or 640×400 Store screenshot as `docs/store-assets/screenshot-01.png`. — Three finalized 1280×800 screenshots are archived in `docs/store-assets/` and passed local dimension/content review.
 
 Items in this section are owner-reported PASS for both the Chrome Extension and Tampermonkey 5.1.0 functional acceptance run.
 
@@ -79,7 +79,7 @@ Items in this section are owner-reported PASS for both the Chrome Extension and 
 - [x] Confirm extension service-worker console and page console have no unexpected functional errors through enable/disable/revoke cycles.
 - [x] Confirm no request is sent to a developer-owned analytics or backend domain.
 
-Known lifecycle observation: reloading, updating, disabling, or re-enabling the unpacked extension invalidates content scripts that were already running in open Threads tabs. An old tab may log `route sync failed Error: Extension context invalidated.` and its controls can stop responding until that tab is reloaded. This is accepted as a low-severity update/development lifecycle limitation, not a functional or data-safety failure; it is not expected to appear as an in-page message to ordinary users.
+Known lifecycle observation: reloading, updating, disabling, or re-enabling the unpacked extension invalidates content scripts that were already running in open Threads tabs. The stale script now suppresses Chrome's expected `Extension context invalidated` lifecycle error; its controls can still stop responding until that tab is reloaded. This is a low-severity update/development lifecycle limitation, not a functional or data-safety failure, and it should not appear as an in-page or extension error message to ordinary users.
 
 ## E. Userscript regression
 
@@ -94,9 +94,9 @@ Record Chrome version, OS, test account state, tested URLs/post types, download 
 ## Sign-off
 
 - Tester: Jwander (owner-reported functional acceptance)
-- Date/time (Asia/Taipei): 2026-08-14
+- Date/time (Asia/Taipei): 2026-08-18
 - Chrome version: 151.0.7922.138
 - Tampermonkey version: Not recorded; generated Threads Plugin userscript version 5.1.0 tested
-- Chrome Extension result: PASS — unpacked development extension functional acceptance
+- Chrome Extension result: PASS — exact production ZIP clean-profile install, real service-worker restart, persisted consent, reconciled capture registration, download, and console inspection
 - Userscript result: PASS — generated Threads Plugin 5.1.0 functional acceptance
-- Known limitations accepted: already-open Threads tabs must be reloaded after extension reload/update if their previous extension context was invalidated. Final production-ZIP clean extraction/install, Store screenshot, public privacy URL, and Dashboard submission review remain separate release gates.
+- Known limitations accepted: already-open Threads tabs must be reloaded after extension reload/update if their previous extension context was invalidated. Dashboard submission review remains a separate external gate.
