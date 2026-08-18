@@ -98,7 +98,7 @@ https://github.com/Jwander0820/threads-plugin
 
 Status: `READY` — 2026-08-18 已確認公開 `main` 上的政策可在未登入狀態透過 HTTPS 讀取，回應為 HTTP 200；Dashboard 應使用下列公開 URL，並在送審前再次核對內容與 `PRIVACY.md` 一致。
 
-https://github.com/Jwander0820/threads-plugin/blob/main/PRIVACY.md
+https://raw.githubusercontent.com/Jwander0820/threads-plugin/refs/heads/main/PRIVACY.md
 
 ## Dashboard Privacy：Single purpose
 
