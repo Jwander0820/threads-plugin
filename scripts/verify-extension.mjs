@@ -19,6 +19,7 @@ const [
     packageText,
     contentSource,
     contentEntrySource,
+    runtimeI18nSource,
     workerSource,
     mainSource,
     optionsHtml,
@@ -33,6 +34,7 @@ const [
     readFile(resolve(REPOSITORY_ROOT, 'package.json'), 'utf8'),
     readFile(resolve(EXTENSION_OUTPUT, 'content.js'), 'utf8'),
     readFile(resolve(REPOSITORY_ROOT, 'src', 'chrome', 'content-entry.js'), 'utf8'),
+    readFile(resolve(REPOSITORY_ROOT, 'src', 'chrome', 'runtime-i18n.js'), 'utf8'),
     readFile(resolve(EXTENSION_OUTPUT, 'service-worker.js'), 'utf8'),
     readFile(resolve(EXTENSION_OUTPUT, 'main-world-capture.js'), 'utf8'),
     readFile(resolve(EXTENSION_OUTPUT, 'options.html'), 'utf8'),
@@ -49,7 +51,7 @@ const zhMessages = JSON.parse(zhMessagesText);
 const enMessages = JSON.parse(enMessagesText);
 const permissions = manifest.permissions || [];
 const uiMessageKeys = new Set();
-for (const key of ['htmlLang', 'consentStatusEnabled', 'consentStatusDisabled']) uiMessageKeys.add(key);
+for (const key of ['htmlLang', 'runtimeLocale', 'consentStatusEnabled', 'consentStatusDisabled']) uiMessageKeys.add(key);
 for (const source of [optionsHtml, privacyHtml]) {
     for (const match of source.matchAll(/data-i18n="([A-Za-z0-9_]+)"/g)) uiMessageKeys.add(match[1]);
 }
@@ -77,6 +79,11 @@ const checks = [
     ['Traditional Chinese UI messages complete', hasCompleteMessages(zhMessages)],
     ['English UI messages complete', hasCompleteMessages(enMessages)],
     ['locale message keys stay aligned', sameValues(Object.keys(zhMessages), Object.keys(enMessages))],
+    ['runtime locale follows Chrome i18n with English fallback',
+        zhMessages.runtimeLocale?.message === 'zh-TW' &&
+        enMessages.runtimeLocale?.message === 'en' &&
+        /getExtensionMessage\(CHROME_RUNTIME_LOCALE_MESSAGE_KEY/.test(runtimeI18nSource) &&
+        /DEFAULT_LOCALE/.test(runtimeI18nSource)],
     ['minimum Chrome version', manifest.minimum_chrome_version === '111'],
     ['exact extension permissions', sameValues(permissions, CHROME_EXTENSION_PERMISSIONS)],
     ['forbidden permissions absent', CHROME_FORBIDDEN_PERMISSIONS.every((permission) => !permissions.includes(permission))],
@@ -85,6 +92,10 @@ const checks = [
     ['exact content-script matches', manifest.content_scripts?.length === 1 && sameValues(manifest.content_scripts[0].matches, THREADS_MATCHES)],
     ['content script is isolated document_start', manifest.content_scripts?.[0]?.run_at === 'document_start' && manifest.content_scripts[0].world !== 'MAIN'],
     ['content bundle includes disclosure gate', /showDisclosure/.test(contentSource) && /decideExtensionBootstrap/.test(contentSource)],
+    ['content runtime receives Chrome i18n translator',
+        /createChromeRuntimeMessage/.test(contentEntrySource) &&
+        /message:\s*createChromeRuntimeMessage\(environment\.chrome\)/.test(contentEntrySource) &&
+        /SHARED_UI_MESSAGES/.test(runtimeI18nSource)],
     ['content runtime never hooks isolated-world network APIs', /captureSource:\s*null/.test(contentSource) && !/unsafeWindow/.test(contentSource)],
     ['bridge uses bounded validated records', /validateCaptureBridgeEvent/.test(contentEntrySource) && !/(?:responseText|rawResponse|bodyText)/.test(contentEntrySource)],
     ['MAIN capture posts extracted records only', /MEDIA_RECORDS/.test(mainSource) && /collectStructuredMediaUrls/.test(mainSource) && !/chrome\.runtime\.sendMessage/.test(mainSource)],

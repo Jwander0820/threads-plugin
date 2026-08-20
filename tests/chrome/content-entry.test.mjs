@@ -90,6 +90,33 @@ test('extension reload invalidation is silent while unrelated content errors rem
     ]]);
 });
 
+test('content bootstrap injects the active chrome.i18n runtime translator', async () => {
+    const setup = fixture();
+    setup.environment.chrome.i18n = {
+        getMessage(key) { return key === 'runtimeLocale' ? 'zh-TW' : ''; }
+    };
+    let runtimeOptions;
+    const controller = await bootstrapChromeContent(setup.environment, {
+        createPlatformAdapter: () => setup.platform,
+        createRuntime: async (options) => {
+            runtimeOptions = options;
+            return {
+                async start() { return true; },
+                async stop() { return true; },
+                async updateOptions() {},
+                ingestCapturedMedia() {}
+            };
+        }
+    });
+
+    assert.equal(runtimeOptions.message('copyCleanLink'), '複製這則貼文連結（去追蹤碼）');
+    assert.equal(
+        runtimeOptions.message('downloadRequested', { filename: 'photo.jpg' }),
+        '已提出下載要求：photo.jpg'
+    );
+    await controller.stop();
+});
+
 test('disabling only advanced capture posts STOP immediately while lifecycle work is blocked', async () => {
     const acceptedCapture = setNetworkCaptureConsent(acceptPageDisclosure(), true);
     const setup = fixture(acceptedCapture);

@@ -78,5 +78,9 @@
   "privacyLimitedUseAfter": { "message": ", including its Limited Use requirements. Information is used only to provide or improve the disclosed single purpose, is not transferred except as necessary to provide that purpose or as otherwise permitted by the policy, is not used for personalized advertising, and is not made available for human reading." },
   "privacyContactHeading": { "message": "Contact" },
   "privacyContactBefore": { "message": "For questions, contact us through " },
-  "privacyContactAfter": { "message": ". Do not include private post content, credentials, or other sensitive information in a public issue. Material policy changes will update this page's date and release notes." }
+  "privacyContactAfter": { "message": ". Do not include private post content, credentials, or other sensitive information in a public issue. Material policy changes will update this page's date and release notes." },
+  "runtimeLocale": {
+    "message": "en",
+    "description": "Selects the shared Threads page runtime catalog for the active Chrome locale."
+  }
 }

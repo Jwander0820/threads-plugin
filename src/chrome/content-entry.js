@@ -7,6 +7,7 @@ import { showDisclosure } from './disclosure.js';
 import { createLatestLifecycleQueue } from './latest-lifecycle-queue.js';
 import { createChromePlatformAdapter } from './platform-adapter.js';
 import { buildMediaRouteKey } from '../shared/route-media-state.js';
+import { createChromeRuntimeMessage } from './runtime-i18n.js';
 
 const IS_NODE_RUNTIME = typeof process !== 'undefined' && process.release?.name === 'node';
 const CAPTURE_MARKER = 'threads-plugin-capture';
@@ -153,7 +154,8 @@ export async function bootstrapChromeContent(environment = globalThis, dependenc
             document: environment.document,
             window: environment.window,
             initialOptions: normalizeOptions(await platform.loadOptions()),
-            clock: environment
+            clock: environment,
+            message: createChromeRuntimeMessage(environment.chrome)
         });
         if (lifecycle.latestValue !== undefined &&
             !decideBootstrap(lifecycle.latestValue, environment.window.location.href).startRuntime) {

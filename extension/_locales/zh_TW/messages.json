@@ -78,5 +78,9 @@
   "privacyLimitedUseAfter": { "message": "，包括 Limited Use 要求。資訊只用於提供或改善已揭露的單一目的；除提供該目的或政策另行允許外不移轉，不用於個人化廣告，也不供人員閱讀。" },
   "privacyContactHeading": { "message": "聯絡方式" },
   "privacyContactBefore": { "message": "問題可透過 " },
-  "privacyContactAfter": { "message": " 聯絡。請勿在公開 issue 放入私人貼文內容、憑證或其他敏感資訊。政策有重大變更時，會更新本頁日期與版本說明。" }
+  "privacyContactAfter": { "message": " 聯絡。請勿在公開 issue 放入私人貼文內容、憑證或其他敏感資訊。政策有重大變更時，會更新本頁日期與版本說明。" },
+  "runtimeLocale": {
+    "message": "zh-TW",
+    "description": "為目前 Chrome 語系選擇 shared Threads 頁面 runtime 的繁體中文 catalog。"
+  }
 }

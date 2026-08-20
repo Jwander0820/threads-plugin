@@ -16,10 +16,12 @@ config/targets.mjs
         └── scripts/build-extension.mjs
 
 src/shared/threads-runtime.js ──┬── src/userscript/entry.js
-                               │        └── src/userscript/platform-adapter.js
+                               │        ├── src/userscript/platform-adapter.js
+                               │        └── src/userscript/i18n.js (navigator locale)
                                │
                                └── src/chrome/content-entry.js (ISOLATED)
-                                        └── src/chrome/platform-adapter.js
+                                        ├── src/chrome/platform-adapter.js
+                                        └── src/chrome/runtime-i18n.js (chrome.i18n locale)
 
 src/shared/network-policy.js ───── src/chrome/main-capture-runtime.js (MAIN)
 src/shared/capture-bridge.js  ───── MAIN → ISOLATED validated message bridge
@@ -53,6 +55,8 @@ Disposing the runtime restores wrapped page APIs, removes styles and controls, u
 `src/chrome/content-entry.js` is the owner of consent, disclosure, shared runtime startup, route reconciliation, and bridge validation. It starts at `document_start`, but page processing remains dormant until disclosure consent is accepted. Login, account, challenge, messages, OAuth, privacy, security, and settings routes are fail-closed.
 
 Consent and route changes pass through a latest-value lifecycle queue. A revoke or sensitive navigation also performs an immediate local stop before queued asynchronous work completes. Starting a runtime rechecks the latest consent, route, URL, and disposed state around asynchronous boundaries so an obsolete start cannot win after a stop.
+
+The content entry also injects the page runtime's message formatter. `src/chrome/runtime-i18n.js` asks packaged `chrome.i18n` resources for `runtimeLocale`, then selects the corresponding catalog from `src/shared/i18n-messages.js`. The English `_locales/en` resource is the manifest fallback; `_locales/zh_TW` selects Traditional Chinese. This keeps the options, privacy, disclosure, and Threads page tools aligned with Chrome's active locale without putting `chrome.*` in shared code or changing the userscript's independent navigator-based locale selection.
 
 The bridge listener is installed before the content script asks the service worker to inject or reconcile MAIN capture, so no separate unbounded early-message queue is needed. The content script issues a fresh route-generation token and answers the MAIN script's bounded `READY` handshake; bridge records must carry the current token as well as the current canonical route.
 
