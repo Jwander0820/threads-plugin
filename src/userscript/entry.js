@@ -1,6 +1,7 @@
 import { normalizeOptions } from '../shared/options.js';
 import { createThreadsRuntime } from '../shared/threads-runtime.js';
 import { createUserscriptPlatformAdapter } from './platform-adapter.js';
+import { createUserscriptMessage } from './i18n.js';
 
 const IS_NODE_RUNTIME = typeof process !== 'undefined' && process.release?.name === 'node';
 
@@ -13,7 +14,8 @@ export async function bootstrapUserscript(environment = globalThis) {
         document: environment.document,
         window: environment.window,
         initialOptions,
-        clock: environment
+        clock: environment,
+        message: createUserscriptMessage(environment.navigator)
     });
     await runtime.start();
     return runtime;

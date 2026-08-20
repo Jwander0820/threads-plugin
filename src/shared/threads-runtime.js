@@ -16,6 +16,8 @@ import {
     utf8ByteLength
 } from './network-policy.js';
 import { DEFAULT_OPTIONS, normalizeOptions } from './options.js';
+import { createMessageFormatter } from './i18n.js';
+import { SHARED_UI_MESSAGES } from './i18n-messages.js';
 import {
     collectStructuredMediaUrls,
     normalizePostIdentity,
@@ -39,7 +41,8 @@ export async function createThreadsRuntime({
     document = globalThis.document,
     window = globalThis.window,
     initialOptions,
-    clock = globalThis
+    clock = globalThis,
+    message = createMessageFormatter({ locale: 'zh-TW', catalogs: SHARED_UI_MESSAGES })
 }) {
     if (!platform) throw new TypeError('platform adapter is required');
     const IS_NODE_RUNTIME = !document || !window;
@@ -51,6 +54,9 @@ export async function createThreadsRuntime({
     const COPY_TOOL_CLASS = 'tm-post-copy-tool-button';
     const LINK_TOOL_CLASS = 'tm-post-link-tool-button';
     const CLEAN_LINK_MENU_CLASS = 'tm-clean-link-menu-item';
+    const POST_BOUNDARY_SELECTOR = 'article,[role="article"],[data-pressable-container]';
+    const SHARE_SVG_CANDIDATE_SELECTOR = 'svg[aria-label],button svg,[role="button"] svg,a svg,[tabindex="0"] svg';
+    const THREADS_SHARE_GLYPH_PATH_PREFIX = 'M7.2474 1.49853C4.18324 -0.187039 0.600262 2.64309 1.53038 6.01431';
     const CLEAN_LINK_ICON_PATH = 'M245.14 352.14c8.49-8.49 22.27-8.49 30.76 0 8.5 8.5 8.5 22.27 0 30.76l-58.53 58.54c-20.35 20.34-47.15 30.51-73.94 30.51s-53.6-10.17-73.94-30.51c-20.34-20.35-30.52-47.15-30.52-73.94 0-26.78 10.18-53.6 30.52-73.94l58.53-58.53c8.5-8.5 22.27-8.5 30.77 0 8.49 8.49 8.49 22.27 0 30.76l-58.54 58.53c-11.84 11.85-17.77 27.51-17.77 43.18 0 15.67 5.93 31.33 17.77 43.17 11.85 11.85 27.51 17.78 43.18 17.78 15.67 0 31.33-5.93 43.17-17.77l58.54-58.54zm46.1-92.68c8.47 8.48 8.47 22.24 0 30.71-8.48 8.47-22.23 8.47-30.71 0l-39.78-39.78c-8.47-8.48-8.47-22.23 0-30.71 8.48-8.47 22.23-8.47 30.71 0l39.78 39.78zm45.28 245.07-25.07 5.19c-3.24.66-6.43-1.44-7.09-4.68l-16.18-78.09a6.006 6.006 0 0 1 4.66-7.11l25.05-5.29c3.27-.65 6.45 1.44 7.11 4.69l16.21 78.2c.66 3.25-1.44 6.43-4.69 7.09zM178.82 6.26 203.39.18c3.22-.8 6.48 1.17 7.28 4.38l19.46 77.29c.8 3.23-1.16 6.5-4.39 7.31l-24.8 6.28c-3.23.8-6.5-1.16-7.31-4.38l-19.46-77.43c-.81-3.23 1.16-6.5 4.38-7.31l.27-.06zm264.17 419.63-17.86 18.43a6.03 6.03 0 0 1-8.52 0l-57.22-55.51a6.015 6.015 0 0 1-.11-8.5l17.8-18.39c2.32-2.38 6.13-2.44 8.51-.12l57.28 55.58a6.027 6.027 0 0 1 .12 8.51zm68.81-112.11-6.62 24.69c-.85 3.21-4.15 5.12-7.37 4.26l-77.08-20.62c-3.22-.86-5.12-4.16-4.27-7.38l6.64-24.72c.86-3.21 4.16-5.12 7.38-4.27l77.05 20.67c3.21.85 5.12 4.16 4.27 7.37zM.38 201.65l6.97-24.15a6.025 6.025 0 0 1 7.42-4.11l76.66 21.79c3.2.91 5.05 4.25 4.15 7.45l-6.96 24.61a6.034 6.034 0 0 1-7.42 4.17L4.38 209.55a6.035 6.035 0 0 1-4.15-7.45l.15-.45zM65.14 87.17l17.84-17.81c2.35-2.34 6.17-2.33 8.51.02l56.38 56.41c2.33 2.35 2.33 6.15 0 8.49l-18.06 18.11a6.014 6.014 0 0 1-8.5.02L64.85 95.97a6.03 6.03 0 0 1 0-8.52l.29-.28zm200.98 71.28c-8.49 8.5-22.27 8.5-30.76 0-8.5-8.49-8.5-22.26 0-30.76l59.26-59.26 1.38-1.27c20.23-19.51 46.43-29.26 72.56-29.26 26.78 0 53.58 10.18 73.93 30.53 20.35 20.35 30.53 47.16 30.53 73.94 0 26.79-10.18 53.59-30.52 73.94l-59.26 59.26c-8.5 8.49-22.27 8.49-30.77 0-8.49-8.49-8.49-22.27 0-30.76l59.27-59.27c11.84-11.84 17.77-27.5 17.77-43.17 0-15.67-5.93-31.33-17.77-43.17-11.86-11.86-27.52-17.79-43.18-17.79-15.3 0-30.55 5.59-42.22 16.76l-60.22 60.28z';
     const MODAL_ID = 'tm-post-media-modal';
     const LOG_PREFIX = '[Threads Target Downloader]';
@@ -154,17 +160,17 @@ export async function createThreadsRuntime({
         saveUserOptions();
         applyUserOptions();
         void registerUserOptionMenu();
-        toast('Threads Media Downloader 設定已還原預設。');
+        toast(message('settingsReset'));
     }
 
     function promptNumberOption(key, label, min, max) {
         const currentValue = USER_OPTIONS[key];
-        const input = window.prompt(`${label}\n目前值：${currentValue} ms\n建議範圍：${min}-${max} ms`, String(currentValue));
+        const input = window.prompt(message('optionPrompt', { label, milliseconds: currentValue, min, max }), String(currentValue));
         if (input == null) return;
 
         const normalized = normalizeOptions({ ...USER_OPTIONS, [key]: input })[key];
         setUserOption(key, normalized);
-        toast(`${label} 已設定為 ${normalized} ms。`);
+        toast(message('optionUpdated', { label, milliseconds: normalized }));
     }
 
     function applyUserOptions() {
@@ -186,23 +192,23 @@ export async function createThreadsRuntime({
         state.disposeSettingsUi = await platform.installSettingsUi({
             commands: [
                 {
-                    label: `${USER_OPTIONS.enablePostMediaPicker ? '✓' : '□'} 批次下載選擇器：${USER_OPTIONS.enablePostMediaPicker ? '開啟' : '關閉'}`,
+                    label: message('mediaPickerMenu', { mark: USER_OPTIONS.enablePostMediaPicker ? '✓' : '□', state: message(USER_OPTIONS.enablePostMediaPicker ? 'enabled' : 'disabled') }),
                     run: () => {
                 setUserOption('enablePostMediaPicker', !USER_OPTIONS.enablePostMediaPicker);
-                toast(`批次下載選擇器已${USER_OPTIONS.enablePostMediaPicker ? '開啟' : '關閉'}。`);
+                toast(message('mediaPickerToggled', { state: message(USER_OPTIONS.enablePostMediaPicker ? 'enabled' : 'disabled') }));
                     }
                 },
-                { label: `設定 Hover 掃描間隔：${USER_OPTIONS.hoverScanIntervalMs} ms`, run: () => promptNumberOption('hoverScanIntervalMs', 'Hover 掃描間隔', 0, 2000) },
-                { label: `設定 Scroll/Resize 刷新間隔：${USER_OPTIONS.layoutRefreshIntervalMs} ms`, run: () => promptNumberOption('layoutRefreshIntervalMs', 'Scroll/Resize 刷新間隔', 0, 5000) },
-                { label: `設定背景完整掃描間隔：${USER_OPTIONS.backgroundScanIntervalMs} ms`, run: () => promptNumberOption('backgroundScanIntervalMs', '背景完整掃描間隔', 3000, 60000) },
+                { label: message('intervalMenu', { label: message('hoverScanInterval'), milliseconds: USER_OPTIONS.hoverScanIntervalMs }), run: () => promptNumberOption('hoverScanIntervalMs', message('hoverScanInterval'), 0, 2000) },
+                { label: message('intervalMenu', { label: message('layoutRefreshInterval'), milliseconds: USER_OPTIONS.layoutRefreshIntervalMs }), run: () => promptNumberOption('layoutRefreshIntervalMs', message('layoutRefreshInterval'), 0, 5000) },
+                { label: message('intervalMenu', { label: message('backgroundScanInterval'), milliseconds: USER_OPTIONS.backgroundScanIntervalMs }), run: () => promptNumberOption('backgroundScanIntervalMs', message('backgroundScanInterval'), 3000, 60000) },
                 {
-                    label: `${USER_OPTIONS.ignoreHorizontalOnlyScroll ? '✓' : '□'} 忽略橫向輪播 Scroll：${USER_OPTIONS.ignoreHorizontalOnlyScroll ? '開啟' : '關閉'}`,
+                    label: message('ignoreHorizontalScrollMenu', { mark: USER_OPTIONS.ignoreHorizontalOnlyScroll ? '✓' : '□', state: message(USER_OPTIONS.ignoreHorizontalOnlyScroll ? 'enabled' : 'disabled') }),
                     run: () => {
                 setUserOption('ignoreHorizontalOnlyScroll', !USER_OPTIONS.ignoreHorizontalOnlyScroll);
-                toast(`忽略橫向輪播 Scroll 已${USER_OPTIONS.ignoreHorizontalOnlyScroll ? '開啟' : '關閉'}。`);
+                toast(message('ignoreHorizontalScrollToggled', { state: message(USER_OPTIONS.ignoreHorizontalOnlyScroll ? 'enabled' : 'disabled') }));
                     }
                 },
-                { label: '還原 Threads Downloader 預設設定', run: resetUserOptions }
+                { label: message('resetSettings'), run: resetUserOptions }
             ]
         });
     }
@@ -989,6 +995,36 @@ export async function createThreadsRuntime({
             .replace(/^\n+|\n+$/g, '');
     }
 
+    function escapeRegExp(text) {
+        return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function getTrailingInlineUiLabels(element, renderedText = getRenderedText(element)) {
+        if (!element || !renderedText) return [];
+        const elementRect = element.getBoundingClientRect?.();
+        if (!elementRect) return [];
+
+        return Array.from(element.querySelectorAll?.('button,[role="button"]') || [])
+            .filter((control) => !control.querySelector?.('svg,img,video,time'))
+            .map((control) => ({
+                label: getRenderedText(control).trim(),
+                rect: control.getBoundingClientRect?.()
+            }))
+            .filter(({ label, rect }) =>
+                label &&
+                !label.includes('\n') &&
+                label.length <= 64 &&
+                rect &&
+                rect.width > 0 &&
+                rect.width <= 220 &&
+                rect.height > 0 &&
+                rect.height <= 48 &&
+                Math.abs(rect.bottom - elementRect.bottom) <= 6 &&
+                new RegExp(`(?:^|\\n)[ \\t\\u00a0]*${escapeRegExp(label)}[ \\t\\u00a0]*$`).test(renderedText)
+            )
+            .map(({ label }) => label);
+    }
+
     function stripTrailingCarouselCounter(text) {
         let output = String(text || '');
         const counterPatterns = [
@@ -1005,12 +1041,36 @@ export async function createThreadsRuntime({
             .replace(/\n+$/g, '');
     }
 
-    function cleanPostTextFragment(text) {
-        return String(text || '')
-            .replace(/\r\n?/g, '\n')
-            .replace(/[ \t\u00a0]*(?:\n[ \t\u00a0]*)?(?:翻譯|查看翻譯)[ \t\u00a0]*$/i, '')
+    function cleanPostTextFragment(text, trailingUiLabels = []) {
+        let output = String(text || '').replace(/\r\n?/g, '\n');
+        const normalizedUiLabels = Array.from(new Set(
+            trailingUiLabels.map((label) => String(label || '').trim()).filter(Boolean)
+        )).sort((a, b) => b.length - a.length);
+
+        normalizedUiLabels.forEach((label) => {
+            output = output.replace(
+                new RegExp(`[ \\t\\u00a0]*(?:\\n[ \\t\\u00a0]*)?${escapeRegExp(label)}[ \\t\\u00a0]*(?:\\n[ \\t\\u00a0]*)*$`),
+                ''
+            );
+        });
+
+        if (normalizedUiLabels.length === 0) {
+            output = output
+                .replace(/[ \t\u00a0]*(?:\n[ \t\u00a0]*)?(?:翻譯|查看翻譯)[ \t\u00a0]*$/i, '')
+                .replace(/[ \t\u00a0]*\n[ \t\u00a0]*(?:Translate|翻訳)[ \t\u00a0]*(?:\n[ \t\u00a0]*)*$/, '');
+        }
+
+        return output
             .replace(/[ \t\u00a0]+$/g, '')
             .replace(/^\n+|\n+$/g, '');
+    }
+
+    function getRenderedPostText(element) {
+        const renderedText = getRenderedText(element);
+        return cleanPostTextFragment(
+            renderedText,
+            getTrailingInlineUiLabels(element, renderedText)
+        );
     }
 
     function isThreadsMusicPlaybackControl(element) {
@@ -1073,7 +1133,17 @@ export async function createThreadsRuntime({
             }
         }
 
-        if (element.querySelector('time, img, video')) return true;
+        if (element.querySelector('time, video')) return true;
+        const containsPostMediaImage = Array.from(element.querySelectorAll('img'))
+            .some((image) => {
+                const imageRect = image.getBoundingClientRect?.();
+                return Boolean(
+                    imageRect &&
+                    imageRect.width >= MIN_MEDIA_SIZE &&
+                    imageRect.height >= MIN_MEDIA_SIZE
+                );
+            });
+        if (containsPostMediaImage) return true;
 
         const rect = element.getBoundingClientRect();
         if (!isVisibleTextRect(rect) || rect.top >= boundaryTop || rect.bottom <= root.getBoundingClientRect().top) return true;
@@ -1119,7 +1189,7 @@ export async function createThreadsRuntime({
             .filter((element) => !isExcludedPostBlockTextElement(element, root, boundaryTop, postInfo))
             .map((element) => ({
                 element,
-                text: cleanPostTextFragment(getRenderedText(element)),
+                text: getRenderedPostText(element),
                 rect: element.getBoundingClientRect(),
                 score: scorePostBlockTextElement(element, root, boundaryTop)
             }))
@@ -1160,12 +1230,12 @@ export async function createThreadsRuntime({
         if (!isValidUserActivationToken(activationToken)) return false;
         const text = extractPostBlockText(root, actionBar);
         if (!text) {
-            toast('找不到這則貼文的文字。');
+            toast(message('postTextNotFound'));
             return false;
         }
 
         copyText(text, activationToken);
-        toast('這則貼文的文字已複製到剪貼簿。');
+        toast(message('postTextCopied'));
         return true;
     }
 
@@ -1176,12 +1246,12 @@ export async function createThreadsRuntime({
             : parsePostInfoFromUrl(location.href);
         const cleanUrl = buildCleanThreadsPostUrl(postInfo || parsePostInfoFromUrl(location.href));
         if (!cleanUrl) {
-            toast('找不到這則貼文的連結。');
+            toast(message('postLinkNotFound'));
             return false;
         }
 
         copyText(cleanUrl, activationToken);
-        toast('這則貼文的無追蹤碼連結已複製到剪貼簿。');
+        toast(message('cleanLinkCopied'));
         return true;
     }
 
@@ -1376,7 +1446,7 @@ export async function createThreadsRuntime({
         const clearTimer = options.clearTimeoutFn || clearTimeout;
         const fallbackController = typeof AbortController === 'function' ? new AbortController() : null;
 
-        toast(`Download requested: ${filename}`);
+        toast(message('downloadRequested', { filename }));
 
         return new Promise((resolve) => {
             let settled = false;
@@ -1405,7 +1475,7 @@ export async function createThreadsRuntime({
 
             const failWithoutFallback = (error) => {
                 warn('download rejected without blob fallback', error);
-                toast('Download failed. Please retry or open the post link manually.');
+                toast(message('downloadFailed'));
                 finish(false);
             };
 
@@ -1434,11 +1504,11 @@ export async function createThreadsRuntime({
                     watchdogMs: blobWatchdogMs,
                     signal: fallbackController?.signal
                 }).then((finalName) => {
-                    toast(`Download started: ${finalName}`);
+                    toast(message('downloadStarted', { filename: finalName }));
                     finish(true);
                 }).catch((blobError) => {
                     warn('fallback download failed', blobError);
-                    toast('Download failed. Please retry or open the post link manually.');
+                    toast(message('downloadFailed'));
                     finish(false);
                 });
             };
@@ -1479,7 +1549,7 @@ export async function createThreadsRuntime({
                 saveAs: false,
                 onload: () => {
                     if (fallbackStarted || settled) return;
-                    toast(`Download started: ${filename}`);
+                    toast(message('downloadStarted', { filename }));
                     finish(true);
                 },
                 onerror: (error) => {
@@ -1610,7 +1680,7 @@ export async function createThreadsRuntime({
 
         if (!mayBeVideo) return null;
 
-        toast('Resolving video URL...');
+        toast(message('resolvingVideoUrl'));
         await nudgeVideoLoading(element);
 
         for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -1650,7 +1720,7 @@ export async function createThreadsRuntime({
         }
 
         if (!item) {
-            toast('Cannot find video URL yet. Play the video once, then press the button again.');
+            toast(message('videoUrlNotFound'));
             setTimer(() => {
                 button.dataset.tmBusy = '0';
             }, 700);
@@ -1761,8 +1831,8 @@ export async function createThreadsRuntime({
                 <path d="M12 4v12M8 12l4 4 4-4M4 20h16" />
             </svg>
         `;
-        button.title = 'Download this Threads media';
-        button.setAttribute('aria-label', 'Download this Threads media');
+        button.title = message('downloadMedia');
+        button.setAttribute('aria-label', message('downloadMedia'));
         button.dataset.tmHidden = '1';
         button.addEventListener('click', handleButtonClick, true);
         button.addEventListener('mousedown', stopButtonEvent, true);
@@ -2209,7 +2279,9 @@ export async function createThreadsRuntime({
         if (node.hasAttribute?.('data-pressable-container')) score += 20000;
         if (node.querySelector?.('time[datetime]')) score += 3000;
         if (findDetailActionBar(node)) score += 2500;
-        if (Array.from(node.querySelectorAll?.('svg[aria-label], svg') || []).some(isShareSvg)) score += 1200;
+        const actionBarCache = new WeakMap();
+        if (Array.from(node.querySelectorAll?.(SHARE_SVG_CANDIDATE_SELECTOR) || [])
+            .some((svg) => isShareSvg(svg, actionBarCache))) score += 1200;
         if (link && node.contains(link)) score += 1000;
         score += Math.min(mediaCount, 12) * 120;
         score += Math.min(rect.height, 1200);
@@ -2286,9 +2358,192 @@ export async function createThreadsRuntime({
         return candidates[0]?.node || null;
     }
 
-    function isShareSvg(svg) {
-        const label = svg.getAttribute('aria-label') || svg.querySelector?.('title')?.textContent || '';
-        return /分享|share/i.test(label);
+    function isInjectedPostToolNode(node) {
+        return Boolean(node?.closest?.(
+            `.${BUTTON_CLASS},.${POST_TOOL_CLASS},.${COPY_TOOL_CLASS},.${LINK_TOOL_CLASS}`
+        ));
+    }
+
+    function getShareCompatibilityLabel(svg) {
+        const labelledControl = svg?.closest?.(
+            '[role="button"][aria-label],button[aria-label],a[aria-label],[tabindex="0"][aria-label]'
+        );
+        return svg?.getAttribute?.('aria-label') ||
+            svg?.querySelector?.('title')?.textContent ||
+            labelledControl?.getAttribute?.('aria-label') ||
+            '';
+    }
+
+    function isClickableActionSlot(slot) {
+        if (slot?.matches?.('[role="button"],button,a,[tabindex="0"]')) return true;
+        if (slot?.querySelector?.('[role="button"],button,a,[tabindex="0"]')) return true;
+        return window?.getComputedStyle?.(slot)?.cursor === 'pointer';
+    }
+
+    function getLocalPostTimeNodes(root) {
+        return [
+            ...(root?.matches?.('time[datetime]') ? [root] : []),
+            ...Array.from(root?.querySelectorAll?.('time[datetime]') || [])
+        ].filter((timeNode) => {
+            const boundary = timeNode.closest?.(POST_BOUNDARY_SELECTOR);
+            return !boundary || boundary === root;
+        });
+    }
+
+    function findPostIdentityRootForActionBar(actionBar) {
+        let node = actionBar?.parentElement;
+
+        for (let depth = 0; node && depth < 16; depth += 1, node = node.parentElement) {
+            if (node === document?.body || node === document?.documentElement) return null;
+
+            if (node.matches?.(POST_BOUNDARY_SELECTOR)) {
+                const postInfo = findBestPostInfoInNode(node, actionBar, true);
+                const localTimeCount = getLocalPostTimeNodes(node).length;
+                if (postInfo || localTimeCount === 1) return node;
+                if (node.matches?.('article,[role="article"]') || localTimeCount > 1) return null;
+                continue;
+            }
+
+            const postIds = getPostIdsInNode(node);
+            const timeCount = getLocalPostTimeNodes(node).length;
+            if (postIds.size === 1 || timeCount === 1) return node;
+            if (postIds.size > 1 || timeCount > 1) return null;
+        }
+
+        return null;
+    }
+
+    function getSvgPathData(svg) {
+        return Array.from(svg?.querySelectorAll?.('path') || [])
+            .map((path) => String(path.getAttribute?.('d') || '').trim().replace(/\s+/g, ' '))
+            .filter(Boolean);
+    }
+
+    function isStableThreadsShareGlyph(svg, pathData = getSvgPathData(svg)) {
+        const viewBox = String(svg?.getAttribute?.('viewBox') || '').trim().replace(/\s+/g, ' ');
+        return viewBox === '0 0 24 24' &&
+            pathData.length === 1 &&
+            pathData[0].startsWith(THREADS_SHARE_GLYPH_PATH_PREFIX);
+    }
+
+    function collectCompactActionIconEntries(actionBar) {
+        const actionRect = actionBar?.getBoundingClientRect?.();
+        if (
+            !actionRect ||
+            actionRect.height < 28 ||
+            actionRect.height > 80
+        ) return [];
+
+        const entriesBySlot = new Map();
+        Array.from(actionBar.querySelectorAll?.('svg') || []).forEach((candidate) => {
+            if (isInjectedPostToolNode(candidate)) return;
+            const slot = findShareIconSlot(candidate, actionBar);
+            const rect = slot?.getBoundingClientRect?.();
+            if (
+                !slot ||
+                slot.parentElement !== actionBar ||
+                isInjectedPostToolNode(slot) ||
+                !isClickableActionSlot(slot) ||
+                !isCompactIconRect(rect)
+            ) return;
+
+            const entry = entriesBySlot.get(slot);
+            if (entry) {
+                entry.svgs.push(candidate);
+            } else {
+                entriesBySlot.set(slot, { slot, rect, svgs: [candidate] });
+            }
+        });
+
+        const entries = Array.from(entriesBySlot.values());
+        if (entries.length < 4 || entries.length > 8) return [];
+
+        const centerYs = entries.map(({ rect }) => rect.top + (rect.height / 2));
+        if (Math.max(...centerYs) - Math.min(...centerYs) > 12) return [];
+
+        const horizontalSteps = entries.slice(1).map((entry, index) =>
+            entry.rect.left - entries[index].rect.left
+        );
+        const isForwardRow = horizontalSteps.every((step) => step >= 12);
+        const isReverseRow = horizontalSteps.every((step) => step <= -12);
+        return isForwardRow || isReverseRow ? entries : [];
+    }
+
+    function collectNativeActionIconEntries(actionBar) {
+        const actionRect = actionBar?.getBoundingClientRect?.();
+        if (!actionRect) return [];
+        const postRoot = findPostIdentityRootForActionBar(actionBar);
+        if (!postRoot) return [];
+        const primaryActionBar = findDetailActionBar(postRoot);
+        if (primaryActionBar && primaryActionBar !== actionBar) {
+            const primaryRect = primaryActionBar.getBoundingClientRect?.();
+            const sameRowWrapper = Boolean(
+                primaryRect &&
+                (
+                    primaryActionBar.contains?.(actionBar) ||
+                    actionBar.contains?.(primaryActionBar)
+                ) &&
+                Math.abs(
+                    (primaryRect.top + (primaryRect.height / 2)) -
+                    (actionRect.top + (actionRect.height / 2))
+                ) <= 12
+            );
+            if (!sameRowWrapper) return [];
+        }
+
+        return collectCompactActionIconEntries(actionBar);
+    }
+
+    function actionBarBelongsToDetailPost(actionBar, postId) {
+        let node = actionBar?.parentElement;
+
+        for (let depth = 0; node && depth < 16; depth += 1, node = node.parentElement) {
+            if (node === document?.body || node === document?.documentElement) return false;
+            const postIds = getPostIdsInNode(node);
+            if (postIds.size > 1) return false;
+            if (postIds.size === 1) return postIds.has(postId);
+        }
+
+        return false;
+    }
+
+    function isDetailRouteBoundShareSvg(svg) {
+        if (typeof location === 'undefined') return false;
+        const detailPostInfo = getCurrentDetailPostInfo();
+        if (!detailPostInfo?.postId || !isStableThreadsShareGlyph(svg)) return false;
+
+        const slot = findShareIconSlot(svg, document?.body || null);
+        const actionBar = slot?.parentElement;
+        const entry = collectCompactActionIconEntries(actionBar)
+            .find((candidate) => candidate.slot === slot && candidate.svgs.includes(svg));
+        if (!entry) return false;
+
+        return actionBarBelongsToDetailPost(actionBar, detailPostInfo.postId);
+    }
+
+    function isStructurallyLocatedShareSvg(svg, actionBarCache) {
+        if (!svg || isInjectedPostToolNode(svg)) return false;
+        const boundary = document?.body || null;
+        const slot = findShareIconSlot(svg, boundary);
+        const actionBar = slot?.parentElement;
+        let entries = actionBar && actionBarCache?.get(actionBar);
+        if (!entries) {
+            entries = collectNativeActionIconEntries(actionBar);
+            if (actionBar) actionBarCache?.set(actionBar, entries);
+        }
+        const structuralEntry = entries.find((entry) =>
+            entry.slot === slot && entry.svgs.includes(svg)
+        );
+        return Boolean(structuralEntry && isStableThreadsShareGlyph(svg));
+    }
+
+    function isShareSvg(svg, actionBarCache) {
+        if (!svg || isInjectedPostToolNode(svg)) return false;
+        const label = getShareCompatibilityLabel(svg);
+        const matchesCompatibilityLabel = /分享|share/i.test(label);
+        if (isStructurallyLocatedShareSvg(svg, actionBarCache)) return true;
+        if (isDetailRouteBoundShareSvg(svg)) return true;
+        return matchesCompatibilityLabel;
     }
 
     function findShareSvgInControl(control) {
@@ -2297,8 +2552,9 @@ export async function createThreadsRuntime({
             return control;
         }
 
-        return Array.from(control.querySelectorAll?.('svg[aria-label], svg') || [])
-            .find(isShareSvg) || null;
+        const actionBarCache = new WeakMap();
+        return Array.from(control.querySelectorAll?.(SHARE_SVG_CANDIDATE_SELECTOR) || [])
+            .find((svg) => isShareSvg(svg, actionBarCache)) || null;
     }
 
     function findShareSvgFromEvent(event) {
@@ -2507,11 +2763,11 @@ export async function createThreadsRuntime({
         );
 
         if (labelNode) {
-            labelNode.nodeValue = '原始連結';
+            labelNode.nodeValue = message('cleanLinkMenuLabel');
         }
 
-        menuItem.setAttribute('aria-label', '複製去除追蹤碼的連結');
-        menuItem.title = '複製去除追蹤碼的連結';
+        menuItem.setAttribute('aria-label', message('cleanLinkAction'));
+        menuItem.title = message('cleanLinkAction');
     }
 
     function replaceCleanLinkMenuIcon(menuItem) {
@@ -2621,7 +2877,7 @@ export async function createThreadsRuntime({
                 !activationToken ||
                 !copyText(context.cleanUrl, activationToken)
             ) return;
-            toast('已複製無追蹤碼連結。');
+            toast(message('cleanLinkCopied'));
             closeNativeShareMenu(context, cleanItem);
         }, true);
 
@@ -2677,8 +2933,8 @@ export async function createThreadsRuntime({
                 return current;
             }
 
-            const style = window.getComputedStyle(current);
-            if (style.cursor === 'pointer') {
+            const style = window?.getComputedStyle?.(current);
+            if (style?.cursor === 'pointer') {
                 return current;
             }
 
@@ -2742,20 +2998,24 @@ export async function createThreadsRuntime({
             { node: document.body, rootPriority: false }
         ].filter((item) => item.node);
         const seen = new Set();
+        const seenSlots = new Set();
+        const actionBarCache = new WeakMap();
         const candidates = [];
 
         searchRoots.forEach(({ node: searchRoot, rootPriority }) => {
-            Array.from(searchRoot.querySelectorAll('svg[aria-label], svg'))
+            Array.from(searchRoot.querySelectorAll(SHARE_SVG_CANDIDATE_SELECTOR))
                 .filter((svg) => {
                     if (seen.has(svg)) return false;
                     seen.add(svg);
                     return true;
                 })
-                .filter(isShareSvg)
+                .filter((svg) => isShareSvg(svg, actionBarCache))
                 .forEach((svg) => {
                     const slot = findShareIconSlot(svg, searchRoot);
                     const rect = slot?.getBoundingClientRect?.();
                     if (!slot || !rect || rect.width < 18 || rect.height < 18) return;
+                    if (seenSlots.has(slot)) return;
+                    seenSlots.add(slot);
                     if (rect.bottom < 0 || rect.top > window.innerHeight) return;
 
                     const blockRoot = findPostBlockRootFromShareButton(slot);
@@ -2828,9 +3088,12 @@ export async function createThreadsRuntime({
     }
 
     function countShareIconsInNode(node) {
-        return Array.from(node.querySelectorAll?.('svg[aria-label]') || [])
-            .filter(isShareSvg)
-            .length;
+        const actionBarCache = new WeakMap();
+        const slots = new Set();
+        Array.from(node.querySelectorAll?.(SHARE_SVG_CANDIDATE_SELECTOR) || [])
+            .filter((svg) => isShareSvg(svg, actionBarCache))
+            .forEach((svg) => slots.add(findShareIconSlot(svg, node) || svg));
+        return slots.size;
     }
 
     function findPostBlockRootFromShareButton(shareButton) {
@@ -2884,8 +3147,8 @@ export async function createThreadsRuntime({
         const linkButton = document.createElement('button');
         linkButton.type = 'button';
         linkButton.className = LINK_TOOL_CLASS;
-        linkButton.title = '複製這則貼文連結（去追蹤碼）';
-        linkButton.setAttribute('aria-label', '複製這則貼文連結（去追蹤碼）');
+        linkButton.title = message('copyCleanLink');
+        linkButton.setAttribute('aria-label', message('copyCleanLink'));
         linkButton.innerHTML = `
             <svg aria-hidden="true" viewBox="0 0 512 509.84" preserveAspectRatio="xMidYMid meet">
                 <path fill="currentColor" stroke="none" fill-rule="nonzero" d="${CLEAN_LINK_ICON_PATH}"></path>
@@ -2910,8 +3173,8 @@ export async function createThreadsRuntime({
         const copyButton = document.createElement('button');
         copyButton.type = 'button';
         copyButton.className = COPY_TOOL_CLASS;
-        copyButton.title = '複製這則貼文文字';
-        copyButton.setAttribute('aria-label', '複製這則貼文文字');
+        copyButton.title = message('copyPostText');
+        copyButton.setAttribute('aria-label', message('copyPostText'));
         copyButton.innerHTML = `
             <svg aria-hidden="true" viewBox="0 0 24 24">
                 <rect x="4" y="3" width="16" height="18" rx="2"></rect>
@@ -2957,9 +3220,10 @@ export async function createThreadsRuntime({
         const activeLinkButtons = new Set();
         const seenRoots = new Set();
         const seenSlots = new Set();
+        const actionBarCache = new WeakMap();
 
-        Array.from(document.querySelectorAll('svg[aria-label]'))
-            .filter(isShareSvg)
+        Array.from(document.querySelectorAll(SHARE_SVG_CANDIDATE_SELECTOR))
+            .filter((svg) => isShareSvg(svg, actionBarCache))
             .forEach((svg) => {
                 const shareButton = findShareIconSlot(svg, document.body);
                 if (!shareButton || seenSlots.has(shareButton)) return;
@@ -3096,8 +3360,8 @@ export async function createThreadsRuntime({
             const button = document.createElement('button');
             button.type = 'button';
             button.className = POST_TOOL_CLASS;
-            button.title = 'Open Threads media downloader';
-            button.setAttribute('aria-label', 'Open Threads media downloader');
+            button.title = message('openMediaDownloader');
+            button.setAttribute('aria-label', message('openMediaDownloader'));
             button.innerHTML = `
                 <svg aria-hidden="true" viewBox="0 0 24 24">
                     <path d="M12 4v12M8 12l4 4 4-4M4 20h16" />
@@ -3434,17 +3698,17 @@ export async function createThreadsRuntime({
         modal.innerHTML = `
             <div class="tm-modal" role="dialog" aria-modal="true" aria-labelledby="tm-post-media-modal-title">
                 <div class="tm-modal-head">
-                    <div class="tm-modal-title" id="tm-post-media-modal-title">Threads Media Downloader</div>
+                    <div class="tm-modal-title" id="tm-post-media-modal-title">${escapeHtml(message('modalTitle'))}</div>
                     <div class="tm-modal-subtitle"></div>
-                    <button type="button" class="tm-close" aria-label="Close">×</button>
+                    <button type="button" class="tm-close" aria-label="${escapeHtml(message('close'))}" title="${escapeHtml(message('close'))}">×</button>
                 </div>
                 <div class="tm-actions">
-                    <button type="button" data-action="download-selected">下載已選取的資源</button>
-                    <button type="button" data-action="download-all">下載所有資源</button>
+                    <button type="button" data-action="download-selected">${escapeHtml(message('downloadSelected'))}</button>
+                    <button type="button" data-action="download-all">${escapeHtml(message('downloadAll'))}</button>
                 </div>
                 <label class="tm-select-row">
                     <input type="checkbox" data-action="select-all">
-                    <span>全選</span>
+                    <span>${escapeHtml(message('selectAll'))}</span>
                 </label>
                 <div class="tm-list"></div>
             </div>
@@ -3504,11 +3768,11 @@ export async function createThreadsRuntime({
         const subtitle = modal.querySelector('.tm-modal-subtitle');
         const list = modal.querySelector('.tm-list');
 
-        subtitle.textContent = `Post ID: ${postInfo.postId}`;
+        subtitle.textContent = `${message('postIdLabel')}: ${postInfo.postId}`;
         list.innerHTML = '';
 
         if (state.modalItems.length === 0) {
-            list.innerHTML = '<div class="tm-empty">目前沒有在主貼文中找到可下載的圖片或影片。</div>';
+            list.innerHTML = `<div class="tm-empty">${escapeHtml(message('noMedia'))}</div>`;
             return;
         }
 
@@ -3516,7 +3780,10 @@ export async function createThreadsRuntime({
             const row = document.createElement('div');
             row.className = 'tm-item';
 
-            const mediaLabel = item.type === 'video' ? `影片 ${index + 1}` : `相片 ${index + 1}`;
+            const mediaLabel = message('mediaLabel', {
+                type: message(item.type === 'video' ? 'video' : 'photo'),
+                index: index + 1
+            });
             const preview = buildModalItemPreviewMarkup(item);
 
             row.innerHTML = `
@@ -3525,10 +3792,10 @@ export async function createThreadsRuntime({
                 </div>
                 <div class="tm-preview">
                     ${preview}
-                    <div>- ${mediaLabel} -</div>
+                    <div>- ${escapeHtml(mediaLabel)} -</div>
                 </div>
                 <div class="tm-open-cell">
-                    <button type="button" class="tm-open" data-action="open-preview" data-index="${index}" title="開啟預覽">↗</button>
+                    <button type="button" class="tm-open" data-action="open-preview" data-index="${index}" title="${escapeHtml(message('openPreview'))}" aria-label="${escapeHtml(message('openPreview'))}">↗</button>
                 </div>
             `;
             const videoThumbnail = row.querySelector('.tm-video-thumbnail');
@@ -3584,7 +3851,7 @@ export async function createThreadsRuntime({
 
             return `
                 <div class="tm-video-thumbnail" data-orientation="landscape">
-                    <span class="tm-video-thumbnail-fallback">影片</span>
+                    <span class="tm-video-thumbnail-fallback">${escapeHtml(message('video'))}</span>
                     ${media}
                     <span class="tm-video-play-badge" aria-hidden="true">▶</span>
                 </div>
@@ -3594,7 +3861,7 @@ export async function createThreadsRuntime({
         const image = validateMediaUrl(item?.previewUrl || item?.resolvedUrl, 'image');
         return image.ok
             ? `<img src="${escapeHtml(image.url)}" alt="">`
-            : '<div>相片</div>';
+            : `<div>${escapeHtml(message('photo'))}</div>`;
     }
 
     function getVideoThumbnailLayout(videoWidth, videoHeight) {
@@ -3676,7 +3943,7 @@ export async function createThreadsRuntime({
     function openPostMediaModal() {
         if (!isPostMediaPickerEnabled()) {
             cleanupDetailButton();
-            toast('文章批次下載功能目前已關閉。');
+            toast(message('pickerDisabled'));
             return;
         }
 
@@ -3739,7 +4006,7 @@ export async function createThreadsRuntime({
         const items = getModalDownloadItems(sourceItems, downloadAll).slice();
 
         if (items.length === 0) {
-            toast('沒有選取任何資源。');
+            toast(message('nothingSelected'));
             return false;
         }
 
@@ -3752,7 +4019,7 @@ export async function createThreadsRuntime({
         );
 
         try {
-            toast(`Preparing ${items.length} media download(s)...`);
+            toast(message('preparingDownloads', { count: items.length }));
 
             for (const modalItem of items) {
                 if (stopped || !isValidUserActivationToken(activationToken)) return false;
@@ -3767,7 +4034,10 @@ export async function createThreadsRuntime({
                     : await resolveItem(modalItem.element);
                 if (stopped) return false;
                 if (!resolved) {
-                    toast(`找不到${modalItem.type === 'video' ? '影片' : '圖片'} ${modalItem.index} 的下載連結。`);
+                    toast(message('mediaLinkNotFound', {
+                        type: message(modalItem.type === 'video' ? 'video' : 'photo'),
+                        index: modalItem.index
+                    }));
                     continue;
                 }
 
@@ -4328,6 +4598,7 @@ export async function createThreadsRuntime({
             buildModalItemPreviewMarkup,
             buildMediaRouteKey,
             classifyNetworkCaptureRequest,
+            cleanPostTextFragment,
             closeNativeShareMenu,
             collectStructuredMediaUrls,
             copyText,
@@ -4336,6 +4607,9 @@ export async function createThreadsRuntime({
             downloadItem,
             downloadModalItems,
             downloadViaBlob,
+            ensureCopyButtonsForBlocks,
+            ensureDetailButton,
+            extractPostBlockText,
             extractVideoUrlsFromText,
             finalizeModalItems,
             findPostContext,
@@ -4343,6 +4617,7 @@ export async function createThreadsRuntime({
             findNativeShareMenuContainer,
             findShareSvgFromEvent,
             getPostBlockTextBoundary,
+            getRenderedPostText,
             handlePostMediaModalKeydown,
             isModalControlIntent,
             getMediaUrlIdentity,
@@ -4382,6 +4657,7 @@ export async function createThreadsRuntime({
             isMediaOwnedByPost,
             isNativeCopyLinkActionRect,
             isSecurityDownloadError,
+            isShareSvg,
             isTrustedUserActivation,
             mergeMediaUrlCache,
             rememberNativeShareContext,

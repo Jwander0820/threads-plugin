@@ -21,6 +21,7 @@ test('generated userscript IIFE executes its real bootstrap and installs runtime
     const errors = [];
     let styles = 0;
     let menus = 0;
+    const menuLabels = [];
     let timerId = 0;
     const eventTarget = { addEventListener() {}, removeEventListener() {} };
     const document = {
@@ -34,7 +35,7 @@ test('generated userscript IIFE executes its real bootstrap and installs runtime
         ...eventTarget,
         document,
         location: { href: 'https://www.threads.com/', origin: 'https://www.threads.com' },
-        navigator: {},
+        navigator: { languages: ['en-US'] },
         console: {
             log(...args) { logs.push(args.join(' ')); },
             warn() {},
@@ -43,7 +44,7 @@ test('generated userscript IIFE executes its real bootstrap and installs runtime
         GM_getValue: () => null,
         GM_setValue() {},
         GM_addStyle() { styles += 1; return { remove() {} }; },
-        GM_registerMenuCommand() { menus += 1; return menus; },
+        GM_registerMenuCommand(label) { menus += 1; menuLabels.push(label); return menus; },
         GM_unregisterMenuCommand() {},
         GM_download() {},
         GM_xmlhttpRequest() {},
@@ -71,6 +72,9 @@ test('generated userscript IIFE executes its real bootstrap and installs runtime
     }
     assert.equal(styles, 1);
     assert.equal(menus, 6);
+    assert.ok(menuLabels.some((label) => label.includes('Batch Download Picker')));
+    assert.ok(menuLabels.some((label) => label.includes('Hover Scan Interval')));
+    assert.ok(menuLabels.every((label) => !/[\u3400-\u9fff]/.test(label)));
     assert.equal(errors.length, 0);
     assert.ok(logs.some((line) => line.includes(`v${packageData.version} loaded`)));
 });

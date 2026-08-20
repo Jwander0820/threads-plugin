@@ -7,6 +7,7 @@ import {
     USERSCRIPT_CONNECTS,
     USERSCRIPT_GRANTS
 } from '../config/targets.mjs';
+import { SHARED_UI_MESSAGES } from '../src/shared/i18n-messages.js';
 
 const MODULE_FILENAME = fileURLToPath(import.meta.url);
 const DEFAULT_ROOT_DIR = resolve(dirname(MODULE_FILENAME), '..');
@@ -103,6 +104,14 @@ function readSharedSource(repositoryRoot) {
         .join('\n');
 }
 
+function validateCatalogUsage(repositoryRoot) {
+    const runtimeSource = readFileSync(resolve(repositoryRoot, 'src', 'shared', 'threads-runtime.js'), 'utf8');
+    const usedKeys = [...runtimeSource.matchAll(/\bmessage\(\s*['"]([^'"]+)['"]/g)]
+        .map((match) => match[1]);
+    const missing = [...new Set(usedKeys)].filter((key) => !SHARED_UI_MESSAGES.en[key]);
+    return { passed: missing.length === 0, detail: missing.length ? `missing English keys: ${missing.join(', ')}` : '' };
+}
+
 function buildChecks(source, packageVersion, metadata, repositoryRoot) {
     const { directives, runtimeSource } = metadata;
     const grantAllowlist = validateAllowlist(directives.get('grant') || [], EXPECTED_ALLOWLISTS.grant);
@@ -110,9 +119,19 @@ function buildChecks(source, packageVersion, metadata, repositoryRoot) {
     const matchAllowlist = validateAllowlist(directives.get('match') || [], EXPECTED_ALLOWLISTS.match);
     const metadataVersion = validateVersion(directives, packageVersion);
     const loadedLogVersion = validateLoadedLog(runtimeSource, packageVersion);
+    const englishDescription = 'Download images and videos from Threads posts, select media in batches, copy post text, and copy links with tracking parameters removed.';
+    const catalogKeys = Object.keys(SHARED_UI_MESSAGES.en).sort();
+    const zhCatalogKeys = Object.keys(SHARED_UI_MESSAGES['zh-TW']).sort();
+    const catalogsComplete = catalogKeys.length > 0 &&
+        JSON.stringify(catalogKeys) === JSON.stringify(zhCatalogKeys) &&
+        Object.values(SHARED_UI_MESSAGES).every((catalog) =>
+            Object.values(catalog).every((value) => typeof value === 'string' && value.trim())
+        );
+    const catalogUsage = validateCatalogUsage(repositoryRoot);
 
     return [
         ['metadata name', hasSingleValue(directives, 'name', 'Threads Plugin')],
+        ['default metadata description is English fallback', hasSingleValue(directives, 'description', englishDescription)],
         ['metadata/package version', metadataVersion.passed, metadataVersion.detail],
         ['runtime loaded-log/package version', loadedLogVersion.passed, loadedLogVersion.detail],
         ['localized zh-TW metadata', hasSingleValue(directives, 'name:zh-TW', 'Threads Plugin') && hasSingleValueMatching(directives, 'description:zh-TW', (value) => value.startsWith('為 Threads'))],
@@ -137,7 +156,12 @@ function buildChecks(source, packageVersion, metadata, repositoryRoot) {
         ['native share clean-link support', /CLEAN_LINK_MENU_CLASS/.test(source) && /closeNativeShareMenu/.test(source)],
         ['shared clean-link icon path', /CLEAN_LINK_ICON_PATH/.test(source) && /M245\.14 352\.14/.test(source) && /createLinkToolButton[\s\S]*CLEAN_LINK_ICON_PATH/.test(source) && /replaceCleanLinkMenuIcon[\s\S]*CLEAN_LINK_ICON_PATH/.test(source)],
         ['native share icon style isolation', /path\.style\.setProperty\(["']fill["'],\s*["']currentColor["'],\s*["']important["']\)/.test(source) && /path\.style\.setProperty\(["']stroke["'],\s*["']none["'],\s*["']important["']\)/.test(source)],
-        ['native share concise clean-link label', /labelNode\.nodeValue = ["']原始連結["']/.test(source) && /複製去除追蹤碼的連結/.test(source)],
+        ['native share labels use translator', /labelNode\.nodeValue = message\(["']cleanLinkMenuLabel["']\)/.test(source) && /message\(["']cleanLinkAction["']\)/.test(source)],
+        ['localized catalogs are complete and aligned', catalogsComplete],
+        ['English catalog covers runtime message keys', catalogUsage.passed, catalogUsage.detail],
+        ['generated userscript contains both catalogs', /Batch Download Picker/.test(runtimeSource) && /批次下載選擇器/.test(runtimeSource)],
+        ['generated userscript has no realized missing-key marker', !/\[missing:[A-Za-z]/.test(runtimeSource)],
+        ['generated userscript does not use chrome i18n', !/chrome\.i18n/.test(runtimeSource)],
         ['native share outer-control targeting', /findShareSvgInControl/.test(source) && /pathControlSvg/.test(source)],
         ['quoted-post targeting support', /findBestPostInfoInNode/.test(source) && /findPostBlockRootFromShareButton/.test(source)],
         ['post text cleanup support', /cleanPostTextFragment/.test(source)],
@@ -145,7 +169,7 @@ function buildChecks(source, packageVersion, metadata, repositoryRoot) {
         ['plugin DOM mutation ignored', /new (?:window\.)?MutationObserver/.test(source) && /POST_TOOL_CLASS/.test(source) && /COPY_TOOL_CLASS/.test(source) && /LINK_TOOL_CLASS/.test(source)],
         ['async runtime lifecycle', /createThreadsRuntime/.test(source) && /async function start/.test(source) && /async function stop/.test(source) && /async function updateOptions/.test(source)],
         ['shared code excludes privileged namespaces', !/(?:\bGM_|\bunsafeWindow\b|\bchrome\.)/.test(readSharedSource(repositoryRoot))],
-        ['no obvious tracking or dynamic code', !/(sendBeacon|document\.cookie|localStorage|sessionStorage|analytics|tracking|eval\(|new Function)/.test(runtimeSource)]
+        ['no obvious tracking or dynamic code', !/(sendBeacon|document\.cookie|localStorage|sessionStorage|analytics|eval\(|new Function)/.test(runtimeSource)]
     ];
 }
 

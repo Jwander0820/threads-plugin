@@ -5,6 +5,10 @@ import {
     createThreadsRuntime,
     MAX_STRUCTURED_RECORDS_PER_ROUTE
 } from '../../src/shared/threads-runtime.js';
+import { createUserscriptMessage } from '../../src/userscript/i18n.js';
+
+const THREADS_SHARE_GLYPH_TEST_PATH =
+    'M7.2474 1.49853C4.18324 -0.187039 0.600262 2.64309 1.53038 6.01431Z';
 
 function fakePlatform() {
     return {
@@ -16,6 +20,740 @@ function fakePlatform() {
         async installSettingsUi() { return () => {}; }
     };
 }
+
+function createThreadsActionFixture({
+    actionLabels = ['いいね', '返信', '再投稿', null],
+    actionPaths = [],
+    actionBarWidth = 360,
+    actionSlotSize = 40,
+    actionSlotStep = 64,
+    includePostIdentity = true
+} = {}) {
+    const toolClasses = new Set([
+        'tm-target-download-button',
+        'tm-post-media-tool-button',
+        'tm-post-copy-tool-button',
+        'tm-post-link-tool-button'
+    ]);
+    const rect = (left, top, width, height) => ({
+        left,
+        top,
+        width,
+        height,
+        right: left + width,
+        bottom: top + height
+    });
+    const selectorContainsClass = (selector, className) =>
+        Boolean(className && selector?.includes?.(`.${className}`));
+    const isArticleSelector = (selector) =>
+        selector?.includes?.('article') || selector?.includes?.('[role="article"]') || selector?.includes?.('[role=article]');
+    const isInteractiveSelector = (selector) => String(selector || '')
+        .split(',')
+        .map((part) => part.trim())
+        .some((part) =>
+            part === 'button' || part.startsWith('button[') ||
+            part === 'a' || part.startsWith('a[') ||
+            part.includes('[role="button"]') || part.includes('[role=button]') ||
+            part.includes('[tabindex="0"]')
+        );
+    const isPostLinkSelector = (selector) => selector?.includes?.('a[href*="/post/"]');
+    const isShareCandidateSelector = (selector) =>
+        selector === 'svg' || selector?.includes?.('svg[aria-label]') || selector?.includes?.('button svg');
+
+    const contains = (container, candidate) => {
+        for (let node = candidate; node; node = node.parentElement) {
+            if (node === container) return true;
+        }
+        return false;
+    };
+
+    const closestFrom = (node, selector) => {
+        for (let current = node; current; current = current.parentElement) {
+            if (selectorContainsClass(selector, current.className)) return current;
+            if (isArticleSelector(selector) && current.tagName === 'ARTICLE') return current;
+            if (isInteractiveSelector(selector) && current.tagName === 'BUTTON') return current;
+        }
+        return null;
+    };
+
+    const makeToolNode = (tagName) => {
+        const attributes = new Map();
+        const node = {
+            tagName: String(tagName).toUpperCase(),
+            className: '',
+            dataset: {},
+            parentElement: null,
+            isConnected: false,
+            children: [],
+            setAttribute(name, value) { attributes.set(name, String(value)); },
+            getAttribute(name) { return attributes.get(name) ?? null; },
+            addEventListener() {},
+            matches(selector) {
+                return selectorContainsClass(selector, this.className) ||
+                    (this.tagName === 'BUTTON' && isInteractiveSelector(selector));
+            },
+            closest(selector) { return closestFrom(this, selector); },
+            querySelector() { return null; },
+            querySelectorAll() { return []; },
+            getBoundingClientRect() { return rect(0, 0, 40, 40); },
+            after(sibling) { this.parentElement?.insertAfter(this, sibling); },
+            appendChild(child) {
+                if (child.parentElement) child.remove();
+                this.children.push(child);
+                child.parentElement = this;
+                child.isConnected = this.isConnected;
+                return child;
+            },
+            remove() {
+                const siblings = this.parentElement?.children;
+                if (siblings) {
+                    const index = siblings.indexOf(this);
+                    if (index >= 0) siblings.splice(index, 1);
+                }
+                this.parentElement = null;
+                this.isConnected = false;
+            }
+        };
+        Object.defineProperties(node, {
+            previousElementSibling: {
+                get() {
+                    const siblings = this.parentElement?.children || [];
+                    const index = siblings.indexOf(this);
+                    return index > 0 ? siblings[index - 1] : null;
+                }
+            },
+            childElementCount: { get() { return this.children.length; } },
+            classList: {
+                get() {
+                    return { contains: (className) => this.className.split(/\s+/).includes(className) };
+                }
+            }
+        });
+        return node;
+    };
+
+    const root = {
+        tagName: 'ARTICLE',
+        parentElement: null,
+        isConnected: true,
+        getBoundingClientRect: () => rect(120, 80, 640, 620),
+        matches(selector) { return isArticleSelector(selector); },
+        closest(selector) { return closestFrom(this, selector); },
+        contains(candidate) { return contains(this, candidate); },
+        hasAttribute() { return false; },
+        querySelector(selector) {
+            if (selector === 'time[datetime]' && includePostIdentity) return timeNode;
+            return null;
+        },
+        querySelectorAll(selector) {
+            if (isShareCandidateSelector(selector)) return svgs;
+            if (isPostLinkSelector(selector)) return includePostIdentity ? [postLink] : [];
+            if (selector === 'time[datetime]') return includePostIdentity ? [timeNode] : [];
+            if (selector === 'div') return this.actionBars || [actionBar];
+            if (selector === 'img, video') return [];
+            return [];
+        }
+    };
+    const actionBar = {
+        tagName: 'DIV',
+        className: '',
+        parentElement: root,
+        isConnected: true,
+        children: [],
+        getBoundingClientRect: () => rect(180, 300, actionBarWidth, 48),
+        matches() { return false; },
+        closest(selector) { return closestFrom(this, selector); },
+        contains(candidate) { return contains(this, candidate); },
+        querySelector(selector) {
+            if (isInteractiveSelector(selector)) return this.children.find((child) => child.tagName === 'BUTTON') || null;
+            return null;
+        },
+        querySelectorAll(selector) {
+            if (selector === 'svg' || isShareCandidateSelector(selector)) return svgs;
+            if (isPostLinkSelector(selector) || selector === 'time[datetime]') return [];
+            if (selector === 'button,a,[role="button"]') {
+                return this.children.filter((child) => child.tagName === 'BUTTON');
+            }
+            return [];
+        },
+        insertAfter(anchor, node) {
+            if (node.parentElement) node.remove();
+            const anchorIndex = this.children.indexOf(anchor);
+            this.children.splice(anchorIndex + 1, 0, node);
+            node.parentElement = this;
+            node.isConnected = true;
+        },
+        appendChild(node) {
+            if (node.parentElement) node.remove();
+            this.children.push(node);
+            node.parentElement = this;
+            node.isConnected = true;
+            return node;
+        }
+    };
+    root.actionBars = [actionBar];
+    const slots = actionLabels.map((label, index) => ({
+        tagName: 'BUTTON',
+        className: '',
+        parentElement: actionBar,
+        isConnected: true,
+        ariaLabel: label,
+        getBoundingClientRect: () => rect(
+            190 + (index * actionSlotStep),
+            304,
+            actionSlotSize,
+            actionSlotSize
+        ),
+        getAttribute(name) { return name === 'aria-label' ? this.ariaLabel : null; },
+        matches(selector) { return isInteractiveSelector(selector); },
+        closest(selector) { return closestFrom(this, selector); },
+        querySelector(selector) { return selector?.includes?.('svg') ? svgs[index] : null; },
+        querySelectorAll(selector) { return isShareCandidateSelector(selector) ? [svgs[index]] : []; },
+        after(node) { actionBar.insertAfter(this, node); }
+    }));
+    const svgs = actionLabels.map((_label, index) => {
+        const pathData = actionPaths[index] ?? (index === 3 ? THREADS_SHARE_GLYPH_TEST_PATH : '');
+        const path = pathData ? {
+            getAttribute(name) { return name === 'd' ? pathData : null; }
+        } : null;
+        return {
+            tagName: 'svg',
+            parentElement: slots[index],
+            isConnected: true,
+            getAttribute(name) { return name === 'viewBox' && path ? '0 0 24 24' : null; },
+            matches() { return false; },
+            closest(selector) { return closestFrom(this, selector); },
+            querySelector() { return null; },
+            querySelectorAll(selector) { return selector === 'path' && path ? [path] : []; }
+        };
+    });
+    actionBar.children.push(...slots);
+
+    const postLink = {
+        tagName: 'A',
+        href: 'https://www.threads.com/@author/post/POST_1',
+        parentElement: root,
+        matches(selector) { return isPostLinkSelector(selector); },
+        closest(selector) { return closestFrom(this, selector); },
+        contains(candidate) { return candidate === this; },
+        getBoundingClientRect: () => rect(160, 100, 120, 24)
+    };
+    const timeNode = {
+        tagName: 'TIME',
+        parentElement: root,
+        getAttribute(name) { return name === 'datetime' ? '2026-08-20T00:00:00.000Z' : null; },
+        matches(selector) { return selector === 'time[datetime]'; },
+        closest(selector) { return closestFrom(this, selector); },
+        getBoundingClientRect: () => rect(160, 100, 80, 20)
+    };
+    const documentElement = {
+        tagName: 'HTML',
+        parentElement: null,
+        isConnected: true,
+        getBoundingClientRect: () => rect(0, 0, 1280, 900),
+        querySelector() { return null; },
+        querySelectorAll() { return []; }
+    };
+    const body = {
+        tagName: 'BODY',
+        parentElement: documentElement,
+        isConnected: true,
+        getBoundingClientRect: () => rect(0, 0, 1280, 900),
+        matches() { return false; },
+        closest(selector) { return closestFrom(this, selector); },
+        contains(candidate) { return contains(this, candidate); },
+        querySelector() { return null; },
+        querySelectorAll(selector) {
+            if (isShareCandidateSelector(selector)) return svgs;
+            if (isPostLinkSelector(selector)) return [];
+            return [];
+        }
+    };
+    root.parentElement = body;
+
+    const document = {
+        body,
+        documentElement,
+        scripts: [],
+        createElement: makeToolNode,
+        getElementById() { return null; },
+        querySelector() { return null; },
+        querySelectorAll(selector) {
+            if (isShareCandidateSelector(selector)) return svgs;
+            if (selector === 'article,[role="article"]') return [root];
+            if (isPostLinkSelector(selector) || selector === 'img, video') return [];
+            return [];
+        }
+    };
+    const window = {
+        innerWidth: 1280,
+        innerHeight: 900,
+        getComputedStyle(node) {
+            return {
+                cursor: node?.tagName === 'BUTTON' ? 'pointer' : 'default',
+                display: 'block',
+                visibility: 'visible'
+            };
+        }
+    };
+
+    return {
+        actionBar,
+        document,
+        root,
+        slots,
+        svgs,
+        toolCount(className) {
+            assert.equal(toolClasses.has(className), true);
+            return actionBar.children.filter((node) => node.className === className).length;
+        },
+        tools() {
+            return actionBar.children.filter((node) => toolClasses.has(node.className));
+        },
+        window
+    };
+}
+
+test('post text cleaner removes only a trailing standalone English Translate label', async () => {
+    const runtime = await createThreadsRuntime({ platform: fakePlatform() });
+    const { cleanPostTextFragment, getRenderedPostText } = runtime.testing;
+
+    assert.equal(cleanPostTextFragment('Hello from Threads\nTranslate'), 'Hello from Threads');
+    assert.equal(cleanPostTextFragment('Translate this sentence for me'), 'Translate this sentence for me');
+    assert.equal(cleanPostTextFragment('I use Google Translate'), 'I use Google Translate');
+    assert.equal(cleanPostTextFragment('Translate'), 'Translate');
+    assert.equal(cleanPostTextFragment('繁中貼文\n翻譯'), '繁中貼文');
+    assert.equal(cleanPostTextFragment('繁中貼文\n查看翻譯'), '繁中貼文');
+    assert.equal(cleanPostTextFragment('繁中貼文 翻譯'), '繁中貼文');
+    assert.equal(cleanPostTextFragment('繁中貼文 查看翻譯'), '繁中貼文');
+    assert.equal(cleanPostTextFragment('日本語の投稿\n翻訳'), '日本語の投稿');
+    assert.equal(cleanPostTextFragment('翻訳してください'), '翻訳してください');
+    assert.equal(cleanPostTextFragment('翻訳'), '翻訳');
+    assert.equal(cleanPostTextFragment('Hello\r\nTranslate\r\n\t'), 'Hello');
+    assert.equal(cleanPostTextFragment('\r\nHello\r\n'), 'Hello');
+    assert.equal(cleanPostTextFragment('Hello \t\u00a0'), 'Hello');
+    assert.equal(cleanPostTextFragment('Hello\r\nWorld'), 'Hello\nWorld');
+
+    const postRect = { left: 0, top: 0, width: 320, height: 42, right: 320, bottom: 42 };
+    const uiRect = { left: 240, top: 21, width: 70, height: 21, right: 310, bottom: 42 };
+    const localizedUiControl = {
+        innerText: 'Traduire',
+        getBoundingClientRect: () => uiRect,
+        querySelector: () => null
+    };
+    const localizedPostElement = {
+        innerText: 'Bonjour Threads\nTraduire',
+        getBoundingClientRect: () => postRect,
+        querySelectorAll(selector) {
+            return selector === 'button,[role="button"]' ? [localizedUiControl] : [];
+        }
+    };
+    const bodyOnlyElement = {
+        ...localizedPostElement,
+        querySelectorAll: () => []
+    };
+    const chineseUiControl = {
+        ...localizedUiControl,
+        innerText: '翻譯'
+    };
+    const sameBodyAndUiLabelElement = {
+        ...localizedPostElement,
+        innerText: '翻譯\n翻譯',
+        querySelectorAll(selector) {
+            return selector === 'button,[role="button"]' ? [chineseUiControl] : [];
+        }
+    };
+    assert.equal(getRenderedPostText(localizedPostElement), 'Bonjour Threads');
+    assert.equal(getRenderedPostText(bodyOnlyElement), 'Bonjour Threads\nTraduire');
+    assert.equal(getRenderedPostText(sameBodyAndUiLabelElement), '翻譯');
+});
+
+test('post text extractor keeps every text segment when one contains a small inline image', async () => {
+    const makeRect = (left, top, width, height) => ({
+        left,
+        top,
+        width,
+        height,
+        right: left + width,
+        bottom: top + height
+    });
+    const inlineImage = {
+        tagName: 'IMG',
+        currentSrc: 'https://media0.giphy.com/inline-sticker.gif',
+        getAttribute(name) { return name === 'alt' ? '' : null; },
+        getBoundingClientRect: () => makeRect(270, 112, 26, 24)
+    };
+    const postMediaImage = {
+        tagName: 'IMG',
+        currentSrc: 'https://scontent.cdninstagram.com/post-media.jpg',
+        getAttribute(name) { return name === 'alt' ? '' : null; },
+        getBoundingClientRect: () => makeRect(160, 260, 420, 300)
+    };
+    const makeTextElement = (innerText, top, images = []) => ({
+        innerText,
+        getBoundingClientRect: () => makeRect(160, top, 420, 66),
+        matches: (selector) => selector === '[dir="auto"]',
+        contains(candidate) { return candidate === this || images.includes(candidate); },
+        closest() { return null; },
+        querySelector(selector) {
+            if (selector === 'button, [role="button"], img, video, time' ||
+                selector === 'button,[role="button"],img,video,time') {
+                return images[0] || null;
+            }
+            return null;
+        },
+        querySelectorAll(selector) {
+            if (selector === 'img') return images;
+            return [];
+        }
+    });
+    const titleText = '《葬送的芙莉蓮》 芙莉蓮與欣梅爾雕像\n當時不懂的戒指，卻成了最漫長的思念。\n(可惡如果有yes i do的行李吊牌飾品一定很搭🥹';
+    const farmText = '這是位在日本千葉縣香取市的農園度假村 THE FARM 的合作活動\n📍35.793238, 140.513407';
+    const titleElement = makeTextElement(titleText, 100, [inlineImage]);
+    const farmElement = makeTextElement(farmText, 176);
+    const mediaWrapper = makeTextElement('post media', 250, [postMediaImage]);
+    const actionBar = {
+        getBoundingClientRect: () => makeRect(160, 520, 420, 40),
+        closest: () => root
+    };
+    const postLink = {
+        href: 'https://www.threads.com/@lacaille_pikmin/post/Db-aDXJkhwc',
+        closest: () => root,
+        contains: () => false,
+        getBoundingClientRect: () => makeRect(160, 70, 120, 20)
+    };
+    const root = {
+        matches: () => false,
+        contains(candidate) {
+            return [this, titleElement, farmElement, mediaWrapper, actionBar, postLink].includes(candidate);
+        },
+        getBoundingClientRect: () => makeRect(140, 40, 460, 560),
+        querySelector: () => null,
+        querySelectorAll(selector) {
+            if (selector === '[dir="auto"]') return [titleElement, farmElement, mediaWrapper];
+            if (selector === 'img, video') return [inlineImage];
+            if (selector === '[aria-label]') return [];
+            if (selector.includes('a[href*="/post/"]')) return [postLink];
+            return [];
+        }
+    };
+    const runtime = await createThreadsRuntime({
+        platform: fakePlatform(),
+        document: { body: root, documentElement: {}, querySelectorAll: () => [] },
+        window: {
+            innerWidth: 1280,
+            innerHeight: 900,
+            getComputedStyle: () => ({ whiteSpace: 'pre-wrap' })
+        },
+        initialOptions: {}
+    });
+
+    assert.equal(
+        runtime.testing.extractPostBlockText(root, actionBar),
+        `${titleText}\n${farmText}`
+    );
+});
+
+test('real runtime injection supports Japanese structure while English and Traditional Chinese stay intact', async () => {
+    const cases = [
+        {
+            name: 'English',
+            labels: ['Like', 'Reply', 'Repost', 'Share'],
+            languages: ['en-US'],
+            expectedTitles: ['Copy Clean Link', 'Copy Post Text']
+        },
+        {
+            name: 'Traditional Chinese',
+            labels: ['讚', '回覆', '轉發', '分享'],
+            languages: ['zh-TW'],
+            expectedTitles: ['複製這則貼文連結（去追蹤碼）', '複製這則貼文文字']
+        },
+        {
+            name: 'Japanese fallback',
+            labels: ['いいね', '返信', '再投稿', null],
+            languages: ['ja-JP'],
+            expectedTitles: ['Copy Clean Link', 'Copy Post Text']
+        }
+    ];
+
+    for (const fixtureCase of cases) {
+        const fixture = createThreadsActionFixture({ actionLabels: fixtureCase.labels });
+        const runtime = await createThreadsRuntime({
+            platform: fakePlatform(),
+            document: fixture.document,
+            window: fixture.window,
+            initialOptions: {},
+            message: createUserscriptMessage({ languages: fixtureCase.languages })
+        });
+
+        fixture.svgs.slice(0, 3).forEach((svg, index) => {
+            assert.equal(runtime.testing.isShareSvg(svg), false, `${fixtureCase.name} action ${index + 1}`);
+        });
+        assert.equal(runtime.testing.isShareSvg(fixture.svgs[3]), true, `${fixtureCase.name} share action`);
+
+        runtime.testing.ensureCopyButtonsForBlocks();
+        runtime.testing.ensureCopyButtonsForBlocks();
+
+        assert.equal(fixture.toolCount('tm-post-link-tool-button'), 1, fixtureCase.name);
+        assert.equal(fixture.toolCount('tm-post-copy-tool-button'), 1, fixtureCase.name);
+        const tools = fixture.tools();
+        assert.deepEqual(tools.map((tool) => tool.title), fixtureCase.expectedTitles, fixtureCase.name);
+        assert.deepEqual(
+            tools.map((tool) => tool.getAttribute('aria-label')),
+            fixtureCase.expectedTitles,
+            `${fixtureCase.name} aria labels`
+        );
+    }
+});
+
+test('structural share locator rejects incomplete and post-unbound icon rows', async () => {
+    const incomplete = createThreadsActionFixture({
+        actionLabels: ['いいね', '返信', '再投稿']
+    });
+    const incompleteRuntime = await createThreadsRuntime({
+        platform: fakePlatform(),
+        document: incomplete.document,
+        window: incomplete.window,
+        initialOptions: {}
+    });
+    incomplete.svgs.forEach((svg) => assert.equal(incompleteRuntime.testing.isShareSvg(svg), false));
+    incompleteRuntime.testing.ensureCopyButtonsForBlocks();
+    assert.equal(incomplete.tools().length, 0);
+
+    const wrapped = createThreadsActionFixture();
+    const emptyPressableWrapper = {
+        tagName: 'DIV',
+        parentElement: wrapped.root,
+        getBoundingClientRect: () => ({
+            left: 160,
+            top: 280,
+            width: 400,
+            height: 90,
+            right: 560,
+            bottom: 370
+        }),
+        matches(selector) {
+            return selector.includes('[data-pressable-container]');
+        },
+        querySelectorAll() { return []; },
+        closest(selector) {
+            return this.matches(selector) ? this : this.parentElement.closest(selector);
+        }
+    };
+    wrapped.actionBar.parentElement = emptyPressableWrapper;
+    const wrappedRuntime = await createThreadsRuntime({
+        platform: fakePlatform(),
+        document: wrapped.document,
+        window: wrapped.window,
+        initialOptions: {},
+        message: createUserscriptMessage({ languages: ['ja-JP'] })
+    });
+    assert.equal(wrappedRuntime.testing.isShareSvg(wrapped.svgs[3]), true);
+    wrappedRuntime.testing.ensureCopyButtonsForBlocks();
+    assert.equal(wrapped.toolCount('tm-post-link-tool-button'), 1);
+    assert.equal(wrapped.toolCount('tm-post-copy-tool-button'), 1);
+
+    const unbound = createThreadsActionFixture({ includePostIdentity: false });
+    const unboundRuntime = await createThreadsRuntime({
+        platform: fakePlatform(),
+        document: unbound.document,
+        window: unbound.window,
+        initialOptions: {}
+    });
+    unbound.svgs.forEach((svg) => assert.equal(unboundRuntime.testing.isShareSvg(svg), false));
+    unboundRuntime.testing.ensureCopyButtonsForBlocks();
+    assert.equal(unbound.tools().length, 0);
+
+    const secondaryToolbar = createThreadsActionFixture({
+        actionLabels: ['絞り込み', '並べ替え', '表示切替', '保存']
+    });
+    const primaryControls = Array.from({ length: 4 }, () => ({
+        getBoundingClientRect: () => ({ width: 40, height: 40 })
+    }));
+    const primaryActionBar = {
+        getBoundingClientRect: () => ({
+            left: 180,
+            top: 420,
+            width: 360,
+            height: 48,
+            right: 540,
+            bottom: 468
+        }),
+        querySelectorAll(selector) {
+            return selector === 'button,a,[role="button"]' ? primaryControls : [];
+        }
+    };
+    secondaryToolbar.root.actionBars = [secondaryToolbar.actionBar, primaryActionBar];
+    const secondaryRuntime = await createThreadsRuntime({
+        platform: fakePlatform(),
+        document: secondaryToolbar.document,
+        window: secondaryToolbar.window,
+        initialOptions: {}
+    });
+    secondaryToolbar.svgs.forEach((svg) => assert.equal(secondaryRuntime.testing.isShareSvg(svg), false));
+    secondaryRuntime.testing.ensureCopyButtonsForBlocks();
+    assert.equal(secondaryToolbar.tools().length, 0);
+
+    const primaryNonShare = createThreadsActionFixture({
+        actionLabels: ['Like', 'Reply', 'Repost', 'Bookmark'],
+        actionPaths: ['', '', '', 'M4 3H20V22L12 17L4 22Z']
+    });
+    const primaryNonShareRuntime = await createThreadsRuntime({
+        platform: fakePlatform(),
+        document: primaryNonShare.document,
+        window: primaryNonShare.window,
+        initialOptions: {}
+    });
+    assert.equal(primaryNonShareRuntime.testing.isShareSvg(primaryNonShare.svgs[3]), false);
+    primaryNonShareRuntime.testing.ensureCopyButtonsForBlocks();
+    assert.equal(primaryNonShare.tools().length, 0);
+
+    const pathlessNonShare = createThreadsActionFixture({
+        actionLabels: ['Like', 'Reply', 'Repost', 'Bookmark'],
+        actionPaths: ['', '', '', '']
+    });
+    const pathlessNonShareRuntime = await createThreadsRuntime({
+        platform: fakePlatform(),
+        document: pathlessNonShare.document,
+        window: pathlessNonShare.window,
+        initialOptions: {}
+    });
+    assert.equal(pathlessNonShareRuntime.testing.isShareSvg(pathlessNonShare.svgs[3]), false);
+    pathlessNonShareRuntime.testing.ensureCopyButtonsForBlocks();
+    assert.equal(pathlessNonShare.tools().length, 0);
+
+    const flexibleActionRow = createThreadsActionFixture({
+        actionLabels: ['いいね', '返信', '再投稿', '保存', null],
+        actionPaths: ['', '', '', 'M4 3H20V22L12 17L4 22Z', THREADS_SHARE_GLYPH_TEST_PATH],
+        actionBarWidth: 176,
+        actionSlotSize: 28,
+        actionSlotStep: 32
+    });
+    const flexibleActionRowRuntime = await createThreadsRuntime({
+        platform: fakePlatform(),
+        document: flexibleActionRow.document,
+        window: flexibleActionRow.window,
+        initialOptions: {},
+        message: createUserscriptMessage({ languages: ['ja-JP'] })
+    });
+    assert.equal(flexibleActionRowRuntime.testing.isShareSvg(flexibleActionRow.svgs[3]), false);
+    assert.equal(flexibleActionRowRuntime.testing.isShareSvg(flexibleActionRow.svgs[4]), true);
+    flexibleActionRowRuntime.testing.ensureCopyButtonsForBlocks();
+    assert.equal(flexibleActionRow.toolCount('tm-post-link-tool-button'), 1);
+    assert.equal(flexibleActionRow.toolCount('tm-post-copy-tool-button'), 1);
+
+    const labelledShare = (label) => ({
+        tagName: 'svg',
+        parentElement: null,
+        getAttribute(name) { return name === 'aria-label' ? label : null; },
+        querySelector() { return null; }
+    });
+    assert.equal(unboundRuntime.testing.isShareSvg(labelledShare('Share')), true);
+    assert.equal(unboundRuntime.testing.isShareSvg(labelledShare('分享')), true);
+    assert.equal(unboundRuntime.testing.isShareSvg(labelledShare('Repost')), false);
+    assert.equal(unboundRuntime.testing.isShareSvg({
+        ...labelledShare('Share'),
+        closest(selector) {
+            return selector.includes('.tm-post-copy-tool-button') ? {} : null;
+        }
+    }), false);
+});
+
+test('one native share control with multiple SVGs is counted as one injection point', async () => {
+    const fixture = createThreadsActionFixture({
+        actionLabels: ['Like', 'Reply', 'Repost', 'Share']
+    });
+    fixture.svgs.push({
+        ...fixture.svgs[3],
+        parentElement: fixture.slots[3]
+    });
+    const runtime = await createThreadsRuntime({
+        platform: fakePlatform(),
+        document: fixture.document,
+        window: fixture.window,
+        initialOptions: {}
+    });
+
+    runtime.testing.ensureCopyButtonsForBlocks();
+    runtime.testing.ensureCopyButtonsForBlocks();
+
+    assert.equal(fixture.toolCount('tm-post-link-tool-button'), 1);
+    assert.equal(fixture.toolCount('tm-post-copy-tool-button'), 1);
+});
+
+test('Japanese detail fixture gets all three English fallback tools without duplicates', async (t) => {
+    const previousLocation = globalThis.location;
+    globalThis.location = { href: 'https://www.threads.com/@author/post/POST_1' };
+    t.after(() => {
+        if (previousLocation === undefined) delete globalThis.location;
+        else globalThis.location = previousLocation;
+    });
+
+    const fixture = createThreadsActionFixture();
+    const composerControls = Array.from({ length: 4 }, () => ({
+        getBoundingClientRect: () => ({ width: 40, height: 40 })
+    }));
+    const lowerComposerActionBar = {
+        parentElement: fixture.root,
+        getBoundingClientRect: () => ({
+            left: 180,
+            top: 500,
+            width: 360,
+            height: 48,
+            right: 540,
+            bottom: 548
+        }),
+        contains: () => false,
+        querySelectorAll(selector) {
+            return selector === 'button,a,[role="button"]' ? composerControls : [];
+        }
+    };
+    fixture.root.actionBars = [fixture.actionBar, lowerComposerActionBar];
+    const runtime = await createThreadsRuntime({
+        platform: fakePlatform(),
+        document: fixture.document,
+        window: fixture.window,
+        initialOptions: {},
+        message: createUserscriptMessage({ languages: ['ja-JP'] })
+    });
+
+    runtime.testing.ensureCopyButtonsForBlocks();
+    runtime.testing.ensureDetailButton();
+    runtime.testing.ensureCopyButtonsForBlocks();
+    runtime.testing.ensureDetailButton();
+
+    assert.equal(fixture.toolCount('tm-post-link-tool-button'), 1);
+    assert.equal(fixture.toolCount('tm-post-copy-tool-button'), 1);
+    assert.equal(fixture.toolCount('tm-post-media-tool-button'), 1);
+    assert.deepEqual(
+        fixture.tools().map((tool) => [tool.className, tool.title, tool.getAttribute('aria-label')]),
+        [
+            ['tm-post-link-tool-button', 'Copy Clean Link', 'Copy Clean Link'],
+            ['tm-post-copy-tool-button', 'Copy Post Text', 'Copy Post Text'],
+            ['tm-post-media-tool-button', 'Open Threads Media Downloader', 'Open Threads Media Downloader']
+        ]
+    );
+});
+
+test('Chrome-compatible default messages still inject structurally located tools idempotently', async () => {
+    const fixture = createThreadsActionFixture();
+    const runtime = await createThreadsRuntime({
+        platform: fakePlatform(),
+        document: fixture.document,
+        window: fixture.window,
+        initialOptions: {}
+    });
+
+    runtime.testing.ensureCopyButtonsForBlocks();
+    runtime.testing.ensureCopyButtonsForBlocks();
+
+    assert.equal(fixture.toolCount('tm-post-link-tool-button'), 1);
+    assert.equal(fixture.toolCount('tm-post-copy-tool-button'), 1);
+    assert.deepEqual(
+        fixture.tools().map((tool) => tool.title),
+        ['複製這則貼文連結（去追蹤碼）', '複製這則貼文文字']
+    );
+});
 
 test('post text boundary stops before Threads music lyrics', async () => {
     const musicControl = {
