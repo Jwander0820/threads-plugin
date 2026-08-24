@@ -59,7 +59,7 @@ test('static pages localize marked text and document language without changing s
     ]);
 });
 
-test('Chrome runtime locale is selected through chrome.i18n with English fallback', () => {
+test('Chrome runtime locale follows Threads document language before chrome.i18n', () => {
     const calls = [];
     const chromeApi = {
         i18n: {
@@ -72,6 +72,18 @@ test('Chrome runtime locale is selected through chrome.i18n with English fallbac
 
     assert.equal(resolveChromeRuntimeLocale(chromeApi), 'zh-TW');
     assert.deepEqual(calls, [[CHROME_RUNTIME_LOCALE_MESSAGE_KEY, undefined]]);
+    assert.equal(resolveChromeRuntimeLocale(chromeApi, {
+        languagePreference: 'auto',
+        documentLanguage: 'en'
+    }), 'en');
+    assert.equal(resolveChromeRuntimeLocale(chromeApi, {
+        languagePreference: 'auto',
+        documentLanguage: 'ja'
+    }), 'en');
+    assert.equal(resolveChromeRuntimeLocale(chromeApi, {
+        languagePreference: 'zh-TW',
+        documentLanguage: 'en'
+    }), 'zh-TW');
     assert.equal(resolveChromeRuntimeLocale({}), 'en');
     assert.equal(resolveChromeRuntimeLocale({ i18n: { getMessage: () => 'ja' } }), 'en');
     assert.equal(resolveChromeRuntimeLocale({ i18n: { getMessage: () => '__proto__' } }), 'en');

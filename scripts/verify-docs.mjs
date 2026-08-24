@@ -8,6 +8,8 @@ import { REPOSITORY_ROOT } from './build-userscript.mjs';
 
 const RELEASE_MODE = process.argv.includes('--release');
 const STORE_ASSET_DIR = resolve(REPOSITORY_ROOT, 'docs', 'store-assets');
+const packageData = JSON.parse(await readFile(resolve(REPOSITORY_ROOT, 'package.json'), 'utf8'));
+const currentVersion = packageData.version;
 
 const required = [
     ['README.md', ['Threads Plugin 是一套 Threads 貼文內容工具', 'Tampermonkey', 'Chrome Extension', 'npm.cmd run verify', 'PRIVACY.md']],
@@ -18,7 +20,7 @@ const required = [
     ['docs/permissions-justification.md', ['Single purpose', '`downloads`', '`storage`', '`scripting`', 'Host permissions']],
     ['docs/store-listing.md', ['簡短說明（zh-TW）', '詳細說明（zh-TW）', 'Privacy policy URL', 'Data usage mapping', 'Remote code', 'Reviewer test instructions', '440×280 small promotional tile', 'External submission preconditions']],
     ['docs/manual-test-checklist.md', ['Clean-profile install', 'Disclosure and revocation', 'Functional parity matrix', 'Userscript regression']],
-    ['CHANGELOG.md', ['[5.1.0]', '2026-08-13', 'Manifest V3', 'Real clean-profile unpacked installation']]
+    ['CHANGELOG.md', [`[${currentVersion}]`, 'Manifest V3', 'Real clean-profile unpacked installation']]
 ];
 
 const securityInvariantPhrases = [
@@ -80,6 +82,16 @@ for (const [path, phrases] of required) {
     else { failed += 1; console.error(`FAIL documented ${path}`); }
 }
 
+const changelogSource = await readFile(resolve(REPOSITORY_ROOT, 'CHANGELOG.md'), 'utf8');
+const escapedVersion = currentVersion.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const currentReleaseEntry = new RegExp(
+    `^## \\[${escapedVersion}\\] - \\d{4}-\\d{2}-\\d{2}$`,
+    'm'
+).test(changelogSource);
+checked += 1;
+if (currentReleaseEntry) console.log(`PASS changelog release entry ${currentVersion}`);
+else { failed += 1; console.error(`FAIL changelog release entry ${currentVersion}`); }
+
 const testMatrixSource = await readFile(resolve(REPOSITORY_ROOT, 'docs', 'TEST_MATRIX.md'), 'utf8');
 const securityLedgerComplete = securityInvariantPhrases.every((phrase) => testMatrixSource.includes(phrase));
 checked += 1;
@@ -107,9 +119,10 @@ for (const phrase of packagedPrivacyPhrases) {
     }
 }
 
-const [storeSource, manualSource] = await Promise.all([
+const [storeSource, manualSource, securityReviewSource] = await Promise.all([
     readFile(resolve(REPOSITORY_ROOT, 'docs', 'store-listing.md'), 'utf8'),
-    readFile(resolve(REPOSITORY_ROOT, 'docs', 'manual-test-checklist.md'), 'utf8')
+    readFile(resolve(REPOSITORY_ROOT, 'docs', 'manual-test-checklist.md'), 'utf8'),
+    readFile(resolve(REPOSITORY_ROOT, 'docs', 'SECURITY_REVIEW.md'), 'utf8')
 ]);
 
 let storeAssetNames = [];
@@ -183,6 +196,19 @@ releaseGate(
 releaseGate('no pending release metadata remains', !storeSource.includes('PENDING_'));
 releaseGate('one to five valid Store screenshots', screenshotsReady);
 releaseGate('valid mandatory 440x280 small promotional tile', smallPromoReady);
+releaseGate(
+    'test matrix matches package version',
+    testMatrixSource.startsWith(`# Threads Plugin ${currentVersion} test matrix`)
+);
+releaseGate(
+    'security review matches package version',
+    securityReviewSource.includes(`ledger for Threads Plugin ${currentVersion}.`)
+);
+releaseGate(
+    'manual sign-off matches package version',
+    getSignoff(manualSource, 'Userscript result').includes(currentVersion) &&
+        getSignoff(manualSource, 'Chrome Extension result').includes(currentVersion)
+);
 
 const manualItems = manualSource.match(/^- \[[ xX]\]/gm) || [];
 const uncheckedManualItems = (manualSource.match(/^- \[ \]/gm) || []).length;

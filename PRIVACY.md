@@ -1,6 +1,6 @@
 # Threads Plugin Privacy Policy
 
-Last updated: 2026-08-13
+Last updated: 2026-08-24
 
 Threads Plugin provides user-invoked media download, post-text copy, and clean-link copy features for Threads. The extension has no developer-operated backend, analytics, advertising, or tracking. Processing is performed locally in the user's browser, subject to the user controls and necessary destinations described below.
 
@@ -37,7 +37,7 @@ No other transfer is performed by the extension. Raw GraphQL response bodies rem
 
 ## Storage and retention
 
-`chrome.storage.local` stores only normalized feature/timing options and consent state. It does not store post text, media URLs, browsing history, cookies, credentials, analytics identifiers, or downloaded file content.
+`chrome.storage.local` stores only normalized feature, timing, and interface-language options, the last supported Threads document locale, and consent state. It does not store post text, media URLs, browsing history, cookies, credentials, analytics identifiers, or downloaded file content.
 
 Parsed post text, links, and media records may remain in the current tab's memory while that tab's consented runtime is active. Route and post identity checks prevent stale records from being accepted for or used as a different route or post. In-memory records are cleared when consent is revoked, the runtime stops (including entry into a sensitive route), or the tab closes; they are never persisted by the extension. Copies and downloads have the separate retention described above.
 

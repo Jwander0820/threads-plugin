@@ -7,6 +7,7 @@ import {
 } from '../shared/consent-state.js';
 import { DEFAULT_OPTIONS, normalizeOptions } from '../shared/options.js';
 import { getExtensionMessage } from './i18n.js';
+import { localizeStoredDocument } from './package-i18n.js';
 import { createChromePlatformAdapter } from './platform-adapter.js';
 
 const IS_NODE_RUNTIME = typeof process !== 'undefined' && process.release?.name === 'node';
@@ -35,11 +36,25 @@ export function consumeNetworkDisclosureConfirmation(dialog) {
 if (!IS_NODE_RUNTIME) {
 const platform = createChromePlatformAdapter(globalThis);
 const byId = (id) => document.getElementById(id);
-const message = (key, substitutions) => getExtensionMessage(key, substitutions);
+let message = (key, substitutions) => getExtensionMessage(key, substitutions);
+
+async function applyLocalization(languagePreference) {
+    const localized = await localizeStoredDocument(
+        document,
+        globalThis,
+        languagePreference ? { languagePreference } : {}
+    );
+    message = localized.message;
+    return localized;
+}
 
 function readForm() {
     return normalizeOptions({
-        enablePostMediaPicker: byId('enable-post-media-picker').checked,
+        enableCopyOriginalLink: byId('enable-copy-original-link').checked,
+        enableCopyPostText: byId('enable-copy-post-text').checked,
+        enableBatchMediaDownload: byId('enable-batch-media-download').checked,
+        enablePerMediaDownload: byId('enable-per-media-download').checked,
+        languagePreference: byId('language-preference').value,
         hoverScanIntervalMs: byId('hover-scan-interval').value,
         layoutRefreshIntervalMs: byId('layout-refresh-interval').value,
         backgroundScanIntervalMs: byId('background-scan-interval').value,
@@ -49,7 +64,11 @@ function readForm() {
 
 function writeForm(options) {
     const normalized = normalizeOptions(options);
-    byId('enable-post-media-picker').checked = normalized.enablePostMediaPicker;
+    byId('enable-copy-original-link').checked = normalized.enableCopyOriginalLink;
+    byId('enable-copy-post-text').checked = normalized.enableCopyPostText;
+    byId('enable-batch-media-download').checked = normalized.enableBatchMediaDownload;
+    byId('enable-per-media-download').checked = normalized.enablePerMediaDownload;
+    byId('language-preference').value = normalized.languagePreference;
     byId('hover-scan-interval').value = normalized.hoverScanIntervalMs;
     byId('layout-refresh-interval').value = normalized.layoutRefreshIntervalMs;
     byId('background-scan-interval').value = normalized.backgroundScanIntervalMs;
@@ -70,7 +89,8 @@ async function refreshConsent() {
 
 byId('options-form').addEventListener('submit', async (event) => {
     event.preventDefault();
-    await platform.saveOptions(readForm());
+    const options = await platform.saveOptions(readForm());
+    await applyLocalization(options.languagePreference);
     const status = byId('save-status');
     status.textContent = message('savedStatus');
     window.setTimeout(() => { status.textContent = ''; }, 1800);
@@ -80,7 +100,13 @@ byId('reset-options').addEventListener('click', async (event) => {
     if (!event.isTrusted) return;
     writeForm(DEFAULT_OPTIONS);
     await platform.saveOptions(DEFAULT_OPTIONS);
+    await applyLocalization(DEFAULT_OPTIONS.languagePreference);
     byId('save-status').textContent = message('defaultsRestoredStatus');
+});
+
+byId('language-preference').addEventListener('change', async (event) => {
+    if (!event.isTrusted) return;
+    await applyLocalization(event.target.value);
 });
 
 byId('enable-page-processing').addEventListener('click', async (event) => {
@@ -117,6 +143,7 @@ byId('network-disclosure').addEventListener('close', async () => {
 });
 
 async function bootstrapOptionsPage() {
+    await applyLocalization();
     await Promise.all([
         platform.loadOptions().then(writeForm),
         refreshConsent()

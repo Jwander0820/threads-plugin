@@ -258,6 +258,7 @@ function createThreadsActionFixture({
         tagName: 'BODY',
         parentElement: documentElement,
         isConnected: true,
+        children: [],
         getBoundingClientRect: () => rect(0, 0, 1280, 900),
         matches() { return false; },
         closest(selector) { return closestFrom(this, selector); },
@@ -267,6 +268,13 @@ function createThreadsActionFixture({
             if (isShareCandidateSelector(selector)) return svgs;
             if (isPostLinkSelector(selector)) return [];
             return [];
+        },
+        appendChild(node) {
+            if (node.parentElement) node.remove();
+            this.children.push(node);
+            node.parentElement = this;
+            node.isConnected = true;
+            return node;
         }
     };
     root.parentElement = body;
@@ -506,6 +514,134 @@ test('real runtime injection supports Japanese structure while English and Tradi
     }
 });
 
+test('the four page features can be enabled independently', async (t) => {
+    const previousLocation = globalThis.location;
+    globalThis.location = { href: 'https://www.threads.com/@author/post/POST_1' };
+    t.after(() => {
+        if (previousLocation === undefined) delete globalThis.location;
+        else globalThis.location = previousLocation;
+    });
+
+    const disabledFeatures = {
+        enableCopyOriginalLink: false,
+        enableCopyPostText: false,
+        enableBatchMediaDownload: false,
+        enablePerMediaDownload: false
+    };
+    const cases = [
+        {
+            key: 'enableCopyOriginalLink',
+            expectedActionTools: ['tm-post-link-tool-button'],
+            expectHoverButton: false
+        },
+        {
+            key: 'enableCopyPostText',
+            expectedActionTools: ['tm-post-copy-tool-button'],
+            expectHoverButton: false
+        },
+        {
+            key: 'enableBatchMediaDownload',
+            expectedActionTools: ['tm-post-media-tool-button'],
+            expectHoverButton: false
+        },
+        {
+            key: 'enablePerMediaDownload',
+            expectedActionTools: [],
+            expectHoverButton: true
+        }
+    ];
+
+    for (const fixtureCase of cases) {
+        const fixture = createThreadsActionFixture();
+        const runtime = await createThreadsRuntime({
+            platform: fakePlatform(),
+            document: fixture.document,
+            window: fixture.window,
+            initialOptions: { ...disabledFeatures, [fixtureCase.key]: true }
+        });
+
+        runtime.testing.ensureCopyButtonsForBlocks();
+        runtime.testing.ensureDetailButton();
+        const hoverButton = runtime.testing.ensureHoverButton();
+
+        assert.deepEqual(
+            fixture.tools().map((tool) => tool.className),
+            fixtureCase.expectedActionTools,
+            fixtureCase.key
+        );
+        assert.equal(Boolean(hoverButton), fixtureCase.expectHoverButton, fixtureCase.key);
+        assert.equal(
+            fixture.document.body.children.filter((node) => node.className === 'tm-target-download-button').length,
+            fixtureCase.expectHoverButton ? 1 : 0,
+            `${fixtureCase.key} hover control`
+        );
+    }
+});
+
+test('live option changes remove disabled controls and rebuild only re-enabled controls', async (t) => {
+    const previousLocation = globalThis.location;
+    globalThis.location = { href: 'https://www.threads.com/@author/post/POST_1' };
+    t.after(() => {
+        if (previousLocation === undefined) delete globalThis.location;
+        else globalThis.location = previousLocation;
+    });
+
+    const fixture = createThreadsActionFixture();
+    let timerId = 0;
+    const intervals = new Set();
+    Object.assign(fixture.document, {
+        addEventListener() {},
+        removeEventListener() {}
+    });
+    Object.assign(fixture.window, {
+        addEventListener() {},
+        removeEventListener() {},
+        setTimeout() { timerId += 1; return timerId; },
+        clearTimeout() {},
+        setInterval() { timerId += 1; intervals.add(timerId); return timerId; },
+        clearInterval(id) { intervals.delete(id); },
+        requestAnimationFrame() { timerId += 1; return timerId; },
+        cancelAnimationFrame() {},
+        MutationObserver: class {
+            observe() {}
+            disconnect() {}
+        }
+    });
+
+    const runtime = await createThreadsRuntime({
+        platform: fakePlatform(),
+        captureSource: null,
+        document: fixture.document,
+        window: fixture.window,
+        initialOptions: {}
+    });
+    await runtime.start();
+    runtime.testing.ensureCopyButtonsForBlocks();
+    runtime.testing.ensureDetailButton();
+
+    assert.deepEqual(fixture.tools().map((tool) => tool.className), [
+        'tm-post-link-tool-button',
+        'tm-post-copy-tool-button',
+        'tm-post-media-tool-button'
+    ]);
+    assert.equal(fixture.document.body.children.some((node) => node.className === 'tm-target-download-button'), true);
+
+    await runtime.updateOptions({
+        enableCopyOriginalLink: false,
+        enableCopyPostText: false,
+        enableBatchMediaDownload: false,
+        enablePerMediaDownload: false
+    });
+    assert.deepEqual(fixture.tools(), []);
+    assert.equal(fixture.document.body.children.some((node) => node.className === 'tm-target-download-button'), false);
+
+    await runtime.updateOptions({ enableCopyOriginalLink: true });
+    assert.deepEqual(fixture.tools().map((tool) => tool.className), ['tm-post-link-tool-button']);
+
+    await runtime.stop();
+    assert.equal(intervals.size, 0);
+});
+
 test('structural share locator rejects incomplete and post-unbound icon rows', async () => {
     const incomplete = createThreadsActionFixture({
         actionLabels: ['いいね', '返信', '再投稿']
@@ -679,6 +815,23 @@ test('one native share control with multiple SVGs is counted as one injection po
 
     assert.equal(fixture.toolCount('tm-post-link-tool-button'), 1);
     assert.equal(fixture.toolCount('tm-post-copy-tool-button'), 1);
+});
+
+test('Japanese video playback controls identify an overlapping video thumbnail', async () => {
+    const runtime = await createThreadsRuntime({ platform: fakePlatform() });
+    const mediaRect = { left: 0, top: 0, right: 320, bottom: 320, width: 320, height: 320 };
+    const controlRect = { left: 130, top: 130, right: 190, bottom: 190, width: 60, height: 60 };
+    const root = {
+        querySelectorAll() {
+            return [{
+                textContent: '',
+                getAttribute(name) { return name === 'aria-label' ? '再生' : null; },
+                getBoundingClientRect() { return controlRect; }
+            }];
+        }
+    };
+
+    assert.equal(runtime.testing.hasOverlappingVideoControl(mediaRect, root), true);
 });
 
 test('Japanese detail fixture gets all three English fallback tools without duplicates', async (t) => {
@@ -1078,8 +1231,57 @@ test('runtime has explicit single-start, idempotent stop and immutable option up
     const next = await runtime.updateOptions({ hoverScanIntervalMs: 9999 });
     assert.equal(next.hoverScanIntervalMs, 2000);
     assert.equal(Object.isFrozen(next), true);
+    assert.equal(await runtime.updateMessage(() => 'localized'), true);
+    await assert.rejects(runtime.updateMessage(null), /message formatter is required/);
     assert.equal(await runtime.stop(), true);
     assert.equal(await runtime.stop(), false);
+});
+
+test('disabling batch download while media resolution is pending prevents the download', async (t) => {
+    const previousLocation = globalThis.location;
+    globalThis.location = { href: 'https://www.threads.com/@author/post/POST_BATCH_DISABLE' };
+    t.after(() => {
+        if (previousLocation === undefined) delete globalThis.location;
+        else globalThis.location = previousLocation;
+    });
+
+    const runtime = await createThreadsRuntime({ platform: fakePlatform(), initialOptions: {} });
+    const activationToken = runtime.testing.createUserActivationToken({
+        isTrusted: true,
+        type: 'click',
+        detail: 1
+    }, { isActive: true });
+    let releaseResolution;
+    let resolutionStarted;
+    const entered = new Promise((resolve) => { resolutionStarted = resolve; });
+    const resolutionGate = new Promise((resolve) => { releaseResolution = resolve; });
+    let downloads = 0;
+
+    const pending = runtime.testing.downloadModalItems(false, activationToken, {
+        items: [{
+            type: 'image',
+            selected: true,
+            element: {},
+            postInfo: { author: 'author', postId: 'POST_BATCH_DISABLE' }
+        }],
+        async resolveItem() {
+            resolutionStarted();
+            await resolutionGate;
+            return {
+                type: 'image',
+                url: 'https://scontent.cdninstagram.com/media.jpg'
+            };
+        },
+        async downloadFn() { downloads += 1; return true; },
+        async delayFn() {}
+    });
+
+    await entered;
+    await runtime.updateOptions({ enableBatchMediaDownload: false });
+    releaseResolution();
+
+    assert.equal(await pending, false);
+    assert.equal(downloads, 0);
 });
 
 test('runtime cannot restart after stop', async () => {

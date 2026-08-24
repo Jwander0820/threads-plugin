@@ -2,7 +2,7 @@
 
 ## Scope and source-of-truth rule
 
-Threads Plugin 5.1.0 is built from one repository into two installable products:
+Threads Plugin 5.2.0 is built from one repository into two installable products:
 
 - the root `threads-plugin.user.js` for Tampermonkey;
 - the Manifest V3 extension under `dist/chrome-extension`, then the deterministic production ZIP under `artifacts`.
@@ -38,7 +38,7 @@ The shared tree does not call `GM_*` or `chrome.*`. Both entry points import and
 - `route-media-state.js` scopes captured media to a canonical route, caps each post at 32 URLs and the route map at 160 posts, and provides monotonic generation invalidation for the userscript capture path.
 - `network-policy.js` recognizes only explicit Threads GraphQL endpoint and operation allowlists, rejects sensitive routes and ambiguous operation headers, enforces an absolute 2 MiB response ceiling (configuration may only reduce it), validates MIME types, and supports cancellation.
 - `capture-bridge.js` creates and validates the small metadata-only MAIN-to-ISOLATED payload, including origin/source checks, route and generation binding, replay IDs, a 64 KiB payload limit, 128-record limit, 8192-character URL limit, 80-character post-ID limit, 256-valid-message/60-second rate limit, replay LRU of 256 IDs, operation, post identity, and media URL validation.
-- `consent-state.js` and `options.js` normalize persisted state and make permissive state impossible to obtain from malformed input.
+- `consent-state.js` and `options.js` normalize persisted state and make permissive state impossible to obtain from malformed input. The four user-facing page capabilities—original-link copy, post-text copy, batch media download, and per-media download—have independent booleans shared by both products; the former batch-picker key is accepted only as a migration fallback.
 
 ## Userscript runtime
 
@@ -56,7 +56,7 @@ Disposing the runtime restores wrapped page APIs, removes styles and controls, u
 
 Consent and route changes pass through a latest-value lifecycle queue. A revoke or sensitive navigation also performs an immediate local stop before queued asynchronous work completes. Starting a runtime rechecks the latest consent, route, URL, and disposed state around asynchronous boundaries so an obsolete start cannot win after a stop.
 
-The content entry also injects the page runtime's message formatter. `src/chrome/runtime-i18n.js` asks packaged `chrome.i18n` resources for `runtimeLocale`, then selects the corresponding catalog from `src/shared/i18n-messages.js`. The English `_locales/en` resource is the manifest fallback; `_locales/zh_TW` selects Traditional Chinese. This keeps the options, privacy, disclosure, and Threads page tools aligned with Chrome's active locale without putting `chrome.*` in shared code or changing the userscript's independent navigator-based locale selection.
+The content entry also injects the page runtime's message formatter. In automatic mode, `src/chrome/runtime-i18n.js` resolves the current Threads document language first, records the last supported result for extension-owned pages, and uses packaged `chrome.i18n` only when no Threads language has been observed. A manual `en` or `zh-TW` preference overrides both sources. Unsupported document languages resolve to the English catalog. The content observer watches the root `lang` attribute and refreshes existing runtime controls without requiring a Chrome restart. Options and privacy pages load the selected packaged `_locales` catalog through `src/chrome/package-i18n.js`; the userscript retains its independent navigator-based locale selection.
 
 The bridge listener is installed before the content script asks the service worker to inject or reconcile MAIN capture, so no separate unbounded early-message queue is needed. The content script issues a fresh route-generation token and answers the MAIN script's bounded `READY` handshake; bridge records must carry the current token as well as the current canonical route.
 
@@ -89,7 +89,7 @@ There are two independent gates:
 
 Declining records an answered-but-disabled state, so the disclosure does not loop. Revoking clears both permissions. On stop, plugin DOM, styles, observers, event listeners, menu registrations, timers, pending operations, replay IDs, post contexts, media maps, and route state are removed or invalidated. Sensitive navigation stops page processing and capture before the normal reconciliation queue.
 
-Persistent extension storage contains only normalized options and consent. Parsed post/media records stay in tab memory; clipboard and downloaded-file retention are controlled by the operating system and Chrome, as disclosed in `PRIVACY.md`.
+Persistent extension storage contains normalized feature, timing, and interface-language options, the last supported Threads document locale, and consent. Parsed post/media records stay in tab memory; clipboard and downloaded-file retention are controlled by the operating system and Chrome, as disclosed in `PRIVACY.md`.
 
 ## Build, test, and release flow
 

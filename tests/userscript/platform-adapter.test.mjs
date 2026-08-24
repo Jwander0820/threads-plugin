@@ -6,7 +6,7 @@ import { createUserscriptPlatformAdapter } from '../../src/userscript/platform-a
 test('userscript adapter presents asynchronous storage and capability interface', async () => {
     const writes = [];
     const environment = {
-        GM_getValue: () => '{"enablePostMediaPicker":false}',
+        GM_getValue: () => '{"enableBatchMediaDownload":false}',
         GM_setValue: (key, value) => writes.push([key, value]),
         GM_setClipboard: (text) => writes.push(['clipboard', text]),
         GM_addStyle: () => {},
@@ -14,8 +14,8 @@ test('userscript adapter presents asynchronous storage and capability interface'
         GM_unregisterMenuCommand: () => {}
     };
     const adapter = createUserscriptPlatformAdapter(environment);
-    assert.equal(await adapter.loadOptions(), '{"enablePostMediaPicker":false}');
-    assert.equal(await adapter.saveOptions({ enablePostMediaPicker: true }), true);
+    assert.equal(await adapter.loadOptions(), '{"enableBatchMediaDownload":false}');
+    assert.equal(await adapter.saveOptions({ enableBatchMediaDownload: true }), true);
     assert.equal(await adapter.writeClipboard('post text'), true);
     assert.deepEqual(Object.keys(adapter).sort(), [
         'downloadMedia', 'installSettingsUi', 'installStyles', 'loadOptions',

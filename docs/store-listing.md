@@ -44,7 +44,7 @@ Productivity
 
 套件回退語言：英文（`en`）；未提供其他地區翻譯時顯示英文名稱與摘要。
 
-Chrome 套件的首次內容處理同意提示、功能與隱私設定頁、動態狀態訊息、進階擷取確認視窗及 packaged 隱私政策皆提供繁體中文與英文；其他語言回退英文。
+Chrome 套件的首次內容處理同意提示、功能與隱私設定頁、動態狀態訊息、進階擷取確認視窗及 packaged 隱私政策皆提供繁體中文與英文。預設自動跟隨 Threads 文件語系，也可手動固定語言；其他語言回退英文，不需要切換或重啟 Chrome 介面語言。
 
 ### English localization copy
 
@@ -111,7 +111,7 @@ https://raw.githubusercontent.com/Jwander0820/threads-plugin/refs/heads/main/PRI
 逐項貼入 Dashboard 的內容見 [`permissions-justification.md`](permissions-justification.md)：
 
 - `downloads`：只在使用者選擇媒體後，由 service worker 再驗證 sender、consent、URL、host、類型與檔名，才交由 Chrome 儲存。
-- `storage`：只保存正規化功能／時間選項與 consent state。
+- `storage`：只保存正規化功能／時間／介面語言選項、最近一次有效的 Threads 語系與 consent state。
 - `scripting`：只用於第二層 opt-in 的 packaged MAIN-world capture 動態註冊、在目前分頁執行權威終止，以及取消未來註冊；被終止的目前 document 必須 reload 或開啟新 document 才能再次擷取。
 - Host permissions：只限四個精確 Threads origin，用來顯示控制項並限制可選的進階 capture 範圍。
 

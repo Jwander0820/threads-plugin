@@ -2,8 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+    AUTO_LOCALE_PREFERENCE,
     createMessageFormatter,
     getFirstValidLanguageTag,
+    normalizeLocalePreference,
+    resolveInterfaceLocale,
     resolvePreferredLocale
 } from '../../src/shared/i18n.js';
 import { SHARED_UI_MESSAGES } from '../../src/shared/i18n-messages.js';
@@ -80,6 +83,45 @@ test('formatter substitutes named values, falls back to English, and marks missi
     }), 'a.jpg:2:1:400:on');
     assert.equal(message('absent'), '[missing:absent]');
     assert.equal(Object.isFrozen(message), true);
+});
+
+test('interface locale follows Threads document language in auto mode with safe fallback', () => {
+    assert.equal(resolveInterfaceLocale({
+        preference: 'auto',
+        documentLanguage: 'en',
+        fallbackLanguage: 'zh-TW'
+    }), 'en');
+    assert.equal(resolveInterfaceLocale({
+        preference: 'auto',
+        documentLanguage: 'zh-Hant-TW',
+        fallbackLanguage: 'en-US'
+    }), 'zh-TW');
+    assert.equal(resolveInterfaceLocale({
+        preference: 'auto',
+        documentLanguage: 'ja',
+        fallbackLanguage: 'zh-TW'
+    }), 'en');
+    assert.equal(resolveInterfaceLocale({
+        preference: 'auto',
+        documentLanguage: '',
+        fallbackLanguage: 'zh-TW'
+    }), 'zh-TW');
+});
+
+test('manual interface locale overrides Threads and invalid preferences normalize to auto', () => {
+    assert.equal(resolveInterfaceLocale({
+        preference: 'zh-TW',
+        documentLanguage: 'en',
+        fallbackLanguage: 'en'
+    }), 'zh-TW');
+    assert.equal(resolveInterfaceLocale({
+        preference: 'en',
+        documentLanguage: 'zh-TW',
+        fallbackLanguage: 'zh-TW'
+    }), 'en');
+    assert.equal(normalizeLocalePreference('zh-TW'), 'zh-TW');
+    assert.equal(normalizeLocalePreference('ja'), AUTO_LOCALE_PREFERENCE);
+    assert.equal(normalizeLocalePreference(null), AUTO_LOCALE_PREFERENCE);
 });
 
 test('userscript message factory produces complete English and Traditional Chinese UI', () => {

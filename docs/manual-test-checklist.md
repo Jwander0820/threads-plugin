@@ -1,5 +1,7 @@
 # Manual browser test checklist
 
+> The completed checks and sign-off below are historical 5.1.0 evidence. They do not approve 5.2.0. The owner has only reported an initial 5.2.0 pass for language selection and the four feature toggles; all exact-ZIP and full regression items must be rerun before release.
+
 Automated local Chrome fixture validation completed on 2026-08-12 with Chrome 151.0.7922.108. The 2026-08-13 automated checkpoint passed 146 Node tests plus the userscript, extension, documentation, generated-output, packaging, and dependency-audit gates. These results describe the checkpoint implementation; final visual assets and the exact release ZIP must be regenerated and signed off before submission:
 
 - fresh install disclosure visible while shared runtime remains dormant;

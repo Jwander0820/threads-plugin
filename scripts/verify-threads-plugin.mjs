@@ -154,12 +154,20 @@ function buildChecks(source, packageVersion, metadata, repositoryRoot) {
         ['copy post text support', /copyPostBlockText/.test(source) && /GM_setClipboard/.test(source)],
         ['direct clean-link support', /copyPostBlockCleanLink/.test(source) && /buildCleanThreadsPostUrl/.test(source)],
         ['native share clean-link support', /CLEAN_LINK_MENU_CLASS/.test(source) && /closeNativeShareMenu/.test(source)],
+        ['four independent userscript feature controls',
+            ['enableCopyOriginalLink', 'enableCopyPostText', 'enableBatchMediaDownload', 'enablePerMediaDownload']
+                .every((key) => runtimeSource.includes(key)) &&
+            /createFeatureOptionCommand/.test(runtimeSource)],
         ['shared clean-link icon path', /CLEAN_LINK_ICON_PATH/.test(source) && /M245\.14 352\.14/.test(source) && /createLinkToolButton[\s\S]*CLEAN_LINK_ICON_PATH/.test(source) && /replaceCleanLinkMenuIcon[\s\S]*CLEAN_LINK_ICON_PATH/.test(source)],
         ['native share icon style isolation', /path\.style\.setProperty\(["']fill["'],\s*["']currentColor["'],\s*["']important["']\)/.test(source) && /path\.style\.setProperty\(["']stroke["'],\s*["']none["'],\s*["']important["']\)/.test(source)],
         ['native share labels use translator', /labelNode\.nodeValue = message\(["']cleanLinkMenuLabel["']\)/.test(source) && /message\(["']cleanLinkAction["']\)/.test(source)],
         ['localized catalogs are complete and aligned', catalogsComplete],
         ['English catalog covers runtime message keys', catalogUsage.passed, catalogUsage.detail],
-        ['generated userscript contains both catalogs', /Batch Download Picker/.test(runtimeSource) && /批次下載選擇器/.test(runtimeSource)],
+        ['generated userscript contains both feature-toggle catalogs',
+            /Copy Original Link/.test(runtimeSource) &&
+            /Per-image Download Button/.test(runtimeSource) &&
+            /複製原始連結/.test(runtimeSource) &&
+            /每張圖片左上角獨立下載/.test(runtimeSource)],
         ['generated userscript has no realized missing-key marker', !/\[missing:[A-Za-z]/.test(runtimeSource)],
         ['generated userscript does not use chrome i18n', !/chrome\.i18n/.test(runtimeSource)],
         ['native share outer-control targeting', /findShareSvgInControl/.test(source) && /pathControlSvg/.test(source)],

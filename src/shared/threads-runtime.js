@@ -180,24 +180,47 @@ export async function createThreadsRuntime({
         state.scrollPositions = new WeakMap();
         startBackgroundScanInterval();
 
-        if (!isPostMediaPickerEnabled()) {
+        if (!isBatchMediaDownloadEnabled()) {
             cleanupDetailButton();
+        }
+        if (!isPerMediaDownloadEnabled()) cleanupPerMediaDownloadButton();
+        if (!isCopyPostTextEnabled()) cleanupTextCopyButtons();
+        if (!isCopyOriginalLinkEnabled()) {
+            cleanupOriginalLinkButtons();
+            clearNativeShareContext('option_disabled');
+            removeInjectedCleanLinkMenuItems();
         }
 
         refreshButtons({ scanNetwork: false });
+    }
+
+    function createFeatureOptionCommand(key, labelKey) {
+        const label = message(labelKey);
+        const enabled = USER_OPTIONS[key] !== false;
+        return {
+            label: message('featureOptionMenu', {
+                mark: enabled ? '✓' : '□',
+                label,
+                state: message(enabled ? 'enabled' : 'disabled')
+            }),
+            run: () => {
+                setUserOption(key, !USER_OPTIONS[key]);
+                toast(message('featureOptionToggled', {
+                    label,
+                    state: message(USER_OPTIONS[key] ? 'enabled' : 'disabled')
+                }));
+            }
+        };
     }
 
     async function registerUserOptionMenu() {
         state.disposeSettingsUi?.();
         state.disposeSettingsUi = await platform.installSettingsUi({
             commands: [
-                {
-                    label: message('mediaPickerMenu', { mark: USER_OPTIONS.enablePostMediaPicker ? '✓' : '□', state: message(USER_OPTIONS.enablePostMediaPicker ? 'enabled' : 'disabled') }),
-                    run: () => {
-                setUserOption('enablePostMediaPicker', !USER_OPTIONS.enablePostMediaPicker);
-                toast(message('mediaPickerToggled', { state: message(USER_OPTIONS.enablePostMediaPicker ? 'enabled' : 'disabled') }));
-                    }
-                },
+                createFeatureOptionCommand('enableCopyOriginalLink', 'copyOriginalLinkOption'),
+                createFeatureOptionCommand('enableCopyPostText', 'copyPostTextOption'),
+                createFeatureOptionCommand('enableBatchMediaDownload', 'batchMediaDownloadOption'),
+                createFeatureOptionCommand('enablePerMediaDownload', 'perMediaDownloadOption'),
                 { label: message('intervalMenu', { label: message('hoverScanInterval'), milliseconds: USER_OPTIONS.hoverScanIntervalMs }), run: () => promptNumberOption('hoverScanIntervalMs', message('hoverScanInterval'), 0, 2000) },
                 { label: message('intervalMenu', { label: message('layoutRefreshInterval'), milliseconds: USER_OPTIONS.layoutRefreshIntervalMs }), run: () => promptNumberOption('layoutRefreshIntervalMs', message('layoutRefreshInterval'), 0, 5000) },
                 { label: message('intervalMenu', { label: message('backgroundScanInterval'), milliseconds: USER_OPTIONS.backgroundScanIntervalMs }), run: () => promptNumberOption('backgroundScanIntervalMs', message('backgroundScanInterval'), 3000, 60000) },
@@ -1227,7 +1250,7 @@ export async function createThreadsRuntime({
     }
 
     function copyPostBlockText(root, actionBar, activationToken) {
-        if (!isValidUserActivationToken(activationToken)) return false;
+        if (!isCopyPostTextEnabled() || !isValidUserActivationToken(activationToken)) return false;
         const text = extractPostBlockText(root, actionBar);
         if (!text) {
             toast(message('postTextNotFound'));
@@ -1240,7 +1263,7 @@ export async function createThreadsRuntime({
     }
 
     function copyPostBlockCleanLink(root, shareButton, activationToken) {
-        if (!isValidUserActivationToken(activationToken)) return false;
+        if (!isCopyOriginalLinkEnabled() || !isValidUserActivationToken(activationToken)) return false;
         const postInfo = root
             ? findBestPostInfoInNode(root, shareButton || root, true)
             : parsePostInfoFromUrl(location.href);
@@ -1704,7 +1727,7 @@ export async function createThreadsRuntime({
     }
 
     async function activateButton(button, activationToken, options = {}) {
-        if (stopped || !isValidUserActivationToken(activationToken)) return false;
+        if (stopped || !isPerMediaDownloadEnabled() || !isValidUserActivationToken(activationToken)) return false;
         if (button.dataset.tmBusy === '1') return false;
 
         const element = options.element || state.elementByButton.get(button);
@@ -1714,7 +1737,7 @@ export async function createThreadsRuntime({
         button.dataset.tmBusy = '1';
 
         const item = element ? await resolveMediaItem(element) : null;
-        if (stopped) {
+        if (stopped || !isPerMediaDownloadEnabled()) {
             button.dataset.tmBusy = '0';
             return false;
         }
@@ -1821,6 +1844,7 @@ export async function createThreadsRuntime({
     }
 
     function ensureHoverButton() {
+        if (!isPerMediaDownloadEnabled()) return null;
         if (state.hoverButton) return state.hoverButton;
 
         const button = document.createElement('button');
@@ -1848,9 +1872,10 @@ export async function createThreadsRuntime({
     }
 
     function showHoverButton(element) {
-        if (!element || !document.documentElement.contains(element)) return;
+        if (!isPerMediaDownloadEnabled() || !element || !document.documentElement.contains(element)) return;
 
         const button = ensureHoverButton();
+        if (!button) return;
         state.hoverElement = element;
         state.elementByButton.set(button, element);
         button.dataset.tmHidden = '0';
@@ -1872,6 +1897,20 @@ export async function createThreadsRuntime({
         button.style.left = '';
         button.style.top = '';
         state.elementByButton.set(button, null);
+    }
+
+    function cleanupPerMediaDownloadButton() {
+        clearHoverScanQueue();
+        window.clearTimeout(state.hideTimer);
+        state.hideTimer = 0;
+        state.pendingHoverPoint = null;
+        state.hoverElement = null;
+        if (state.hoverButton) {
+            state.hoverButton.remove();
+            state.liveButtons.delete(state.hoverButton);
+            state.hoverButton = null;
+        }
+        state.elementByButton = new WeakMap();
     }
 
     function scheduleHideHoverButton() {
@@ -2050,6 +2089,7 @@ export async function createThreadsRuntime({
     }
 
     function setPointerDragActive(event) {
+        if (!isPerMediaDownloadEnabled()) return;
         if (findButtonFromEvent(event)) return;
         state.pointerDragActive = true;
         state.pendingHoverPoint = null;
@@ -2062,6 +2102,7 @@ export async function createThreadsRuntime({
     }
 
     function processMediaPointerMove(point) {
+        if (!isPerMediaDownloadEnabled()) return;
         const button = state.hoverButton;
         if (button && (point.target === button || button.contains(point.target))) {
             return;
@@ -2078,6 +2119,7 @@ export async function createThreadsRuntime({
     }
 
     function runQueuedHoverScan() {
+        if (!isPerMediaDownloadEnabled()) return;
         if (state.hoverMoveRaf) return;
         state.hoverMoveRaf = window.requestAnimationFrame(() => {
             state.hoverMoveRaf = 0;
@@ -2107,6 +2149,10 @@ export async function createThreadsRuntime({
     }
 
     function handleMediaPointerMove(event) {
+        if (!isPerMediaDownloadEnabled()) {
+            cleanupPerMediaDownloadButton();
+            return;
+        }
         if (state.pointerDragActive || isPrimaryPointerDown(event)) {
             state.pendingHoverPoint = null;
             clearHoverScanQueue();
@@ -2246,7 +2292,7 @@ export async function createThreadsRuntime({
 
         return labelledControls.some((uiNode) => {
             const label = uiNode.getAttribute('aria-label') || uiNode.textContent || '';
-            if (!/play|pause|mute|unmute|audio|sound/i.test(label)) return false;
+            if (!/(?:play|pause|mute|unmute|audio|sound|再生|一時停止|ミュート|音声|サウンド|播放|暫停|暂停|靜音|静音|取消靜音|取消静音|音訊|音频)/i.test(label)) return false;
 
             const controlRect = uiNode.getBoundingClientRect();
             return rectsOverlap(mediaRect, controlRect);
@@ -2635,6 +2681,7 @@ export async function createThreadsRuntime({
     }
 
     function rememberNativeShareContext(event) {
+        if (!isCopyOriginalLinkEnabled()) return;
         if (Date.now() < state.suppressNativeShareContextUntil) return;
         if (!isTrustedUserActivation(event)) return;
 
@@ -2839,6 +2886,7 @@ export async function createThreadsRuntime({
     }
 
     function injectCleanLinkMenuItem() {
+        if (!isCopyOriginalLinkEnabled()) return false;
         const context = state.pendingShareContext;
         if (!pruneNativeShareContext()) return false;
         if (
@@ -2870,6 +2918,7 @@ export async function createThreadsRuntime({
             blockEvent(event);
             const activationToken = createUserActivationToken(event);
             if (
+                !isCopyOriginalLinkEnabled() ||
                 !pruneNativeShareContext() ||
                 state.pendingShareContext !== context ||
                 cleanItem.parentElement !== context.menuItemParent ||
@@ -2891,6 +2940,10 @@ export async function createThreadsRuntime({
 
     function scheduleCleanLinkMenuInjection(attempt) {
         window.clearTimeout(state.cleanLinkMenuTimer);
+        if (!isCopyOriginalLinkEnabled()) {
+            state.cleanLinkMenuTimer = 0;
+            return;
+        }
         state.cleanLinkMenuTimer = window.setTimeout(() => {
             state.cleanLinkMenuTimer = 0;
             if (injectCleanLinkMenuItem()) return;
@@ -3143,6 +3196,22 @@ export async function createThreadsRuntime({
         return best;
     }
 
+    function isCopyOriginalLinkEnabled() {
+        return USER_OPTIONS.enableCopyOriginalLink !== false;
+    }
+
+    function isCopyPostTextEnabled() {
+        return USER_OPTIONS.enableCopyPostText !== false;
+    }
+
+    function isBatchMediaDownloadEnabled() {
+        return USER_OPTIONS.enableBatchMediaDownload !== false;
+    }
+
+    function isPerMediaDownloadEnabled() {
+        return USER_OPTIONS.enablePerMediaDownload !== false;
+    }
+
     function createLinkToolButton(root, shareButton) {
         const linkButton = document.createElement('button');
         linkButton.type = 'button';
@@ -3156,6 +3225,7 @@ export async function createThreadsRuntime({
         `;
         linkButton.addEventListener('click', (event) => {
             blockEvent(event);
+            if (!isCopyOriginalLinkEnabled()) return;
             const activationToken = createUserActivationToken(event);
             if (!activationToken) return;
             const context = state.linkContextByButton.get(linkButton);
@@ -3183,6 +3253,7 @@ export async function createThreadsRuntime({
         `;
         copyButton.addEventListener('click', (event) => {
             blockEvent(event);
+            if (!isCopyPostTextEnabled()) return;
             const activationToken = createUserActivationToken(event);
             if (!activationToken) return;
             const context = state.copyContextByButton.get(copyButton);
@@ -3200,12 +3271,15 @@ export async function createThreadsRuntime({
         return copyButton;
     }
 
-    function cleanupCopyButtons() {
+    function cleanupTextCopyButtons() {
         state.liveCopyButtons.forEach((button) => button.remove());
         state.liveCopyButtons.clear();
         state.copyButtonByRoot = new WeakMap();
         state.copyButtonByShare = new WeakMap();
         state.copyContextByButton = new WeakMap();
+    }
+
+    function cleanupOriginalLinkButtons() {
         state.liveLinkButtons.forEach((button) => button.remove());
         state.liveLinkButtons.clear();
         state.linkButtonByRoot = new WeakMap();
@@ -3213,8 +3287,17 @@ export async function createThreadsRuntime({
         state.linkContextByButton = new WeakMap();
     }
 
+    function cleanupCopyButtons() {
+        cleanupTextCopyButtons();
+        cleanupOriginalLinkButtons();
+    }
+
     function ensureCopyButtonsForBlocks() {
         if (!document.body) return;
+
+        if (!isCopyPostTextEnabled()) cleanupTextCopyButtons();
+        if (!isCopyOriginalLinkEnabled()) cleanupOriginalLinkButtons();
+        if (!isCopyPostTextEnabled() && !isCopyOriginalLinkEnabled()) return;
 
         const activeCopyButtons = new Set();
         const activeLinkButtons = new Set();
@@ -3232,44 +3315,54 @@ export async function createThreadsRuntime({
                 const rect = shareButton.getBoundingClientRect();
                 if (!isCompactIconRect(rect)) return;
 
-                let copyButton = state.copyButtonByShare.get(shareButton);
-                const cachedContext = copyButton && state.copyContextByButton.get(copyButton);
+                let copyButton = isCopyPostTextEnabled()
+                    ? state.copyButtonByShare.get(shareButton)
+                    : null;
+                let linkButton = isCopyOriginalLinkEnabled()
+                    ? state.linkButtonByShare.get(shareButton)
+                    : null;
+                const cachedContext = (copyButton && state.copyContextByButton.get(copyButton)) ||
+                    (linkButton && state.linkContextByButton.get(linkButton));
                 const root = cachedContext?.root?.isConnected
                     ? cachedContext.root
                     : findPostBlockRootFromShareButton(shareButton);
                 if (!root || seenRoots.has(root)) return;
                 seenRoots.add(root);
 
-                let linkButton = state.linkButtonByShare.get(shareButton) ||
-                    state.linkButtonByRoot.get(root);
-                if (!linkButton || !linkButton.isConnected) {
-                    linkButton = createLinkToolButton(root, shareButton);
-                } else {
-                    state.linkButtonByRoot.set(root, linkButton);
-                    state.linkButtonByShare.set(shareButton, linkButton);
-                    state.linkContextByButton.set(linkButton, { root, shareButton });
+                if (isCopyOriginalLinkEnabled()) {
+                    linkButton = linkButton || state.linkButtonByRoot.get(root);
+                    if (!linkButton || !linkButton.isConnected) {
+                        linkButton = createLinkToolButton(root, shareButton);
+                    } else {
+                        state.linkButtonByRoot.set(root, linkButton);
+                        state.linkButtonByShare.set(shareButton, linkButton);
+                        state.linkContextByButton.set(linkButton, { root, shareButton });
+                    }
                 }
 
-                copyButton = copyButton || state.copyButtonByRoot.get(root);
-                if (!copyButton || !copyButton.isConnected) {
-                    copyButton = createCopyToolButton(root, shareButton);
-                } else {
-                    state.copyButtonByShare.set(shareButton, copyButton);
-                    state.copyContextByButton.set(copyButton, {
-                        root,
-                        shareButton,
-                        actionBar: shareButton.parentElement
-                    });
+                if (isCopyPostTextEnabled()) {
+                    copyButton = copyButton || state.copyButtonByRoot.get(root);
+                    if (!copyButton || !copyButton.isConnected) {
+                        copyButton = createCopyToolButton(root, shareButton);
+                    } else {
+                        state.copyButtonByShare.set(shareButton, copyButton);
+                        state.copyContextByButton.set(copyButton, {
+                            root,
+                            shareButton,
+                            actionBar: shareButton.parentElement
+                        });
+                    }
                 }
 
-                if (linkButton.previousElementSibling !== shareButton) {
+                if (linkButton && linkButton.previousElementSibling !== shareButton) {
                     shareButton.after(linkButton);
                 }
-                if (copyButton.previousElementSibling !== linkButton) {
-                    linkButton.after(copyButton);
+                const copyAnchor = linkButton || shareButton;
+                if (copyButton && copyButton.previousElementSibling !== copyAnchor) {
+                    copyAnchor.after(copyButton);
                 }
-                activeLinkButtons.add(linkButton);
-                activeCopyButtons.add(copyButton);
+                if (linkButton) activeLinkButtons.add(linkButton);
+                if (copyButton) activeCopyButtons.add(copyButton);
             });
 
         state.liveCopyButtons.forEach((button) => {
@@ -3294,10 +3387,6 @@ export async function createThreadsRuntime({
         bar.className = 'tm-post-media-tool-fallback';
         root.appendChild(bar);
         return bar;
-    }
-
-    function isPostMediaPickerEnabled() {
-        return USER_OPTIONS.enablePostMediaPicker !== false;
     }
 
     function cleanupDetailButton() {
@@ -3356,7 +3445,7 @@ export async function createThreadsRuntime({
         const { root, shareButton, actionBar } = getDetailUiContext(routeKey);
         if (!actionBar) return;
 
-        if (isPostMediaPickerEnabled() && !state.detailButton) {
+        if (isBatchMediaDownloadEnabled() && !state.detailButton) {
             const button = document.createElement('button');
             button.type = 'button';
             button.className = POST_TOOL_CLASS;
@@ -3373,7 +3462,7 @@ export async function createThreadsRuntime({
                 openPostMediaModal();
             }, true);
             state.detailButton = button;
-        } else if (!isPostMediaPickerEnabled()) {
+        } else if (!isBatchMediaDownloadEnabled()) {
             cleanupDetailButton();
         }
 
@@ -3941,7 +4030,7 @@ export async function createThreadsRuntime({
     }
 
     function openPostMediaModal() {
-        if (!isPostMediaPickerEnabled()) {
+        if (!isBatchMediaDownloadEnabled()) {
             cleanupDetailButton();
             toast(message('pickerDisabled'));
             return;
@@ -3999,7 +4088,7 @@ export async function createThreadsRuntime({
     }
 
     async function downloadModalItems(downloadAll, activationToken, options = {}) {
-        if (!isValidUserActivationToken(activationToken)) return false;
+        if (!isBatchMediaDownloadEnabled() || !isValidUserActivationToken(activationToken)) return false;
         if (state.batchDownloadInProgress) return false;
 
         const sourceItems = Array.isArray(options.items) ? options.items : state.modalItems;
@@ -4022,7 +4111,7 @@ export async function createThreadsRuntime({
             toast(message('preparingDownloads', { count: items.length }));
 
             for (const modalItem of items) {
-                if (stopped || !isValidUserActivationToken(activationToken)) return false;
+                if (stopped || !isBatchMediaDownloadEnabled() || !isValidUserActivationToken(activationToken)) return false;
                 const resolved = modalItem.resolvedUrl
                     ? {
                         type: modalItem.type,
@@ -4032,7 +4121,7 @@ export async function createThreadsRuntime({
                         postInfo: modalItem.postInfo
                     }
                     : await resolveItem(modalItem.element);
-                if (stopped) return false;
+                if (stopped || !isBatchMediaDownloadEnabled() || !isValidUserActivationToken(activationToken)) return false;
                 if (!resolved) {
                     toast(message('mediaLinkNotFound', {
                         type: message(modalItem.type === 'video' ? 'video' : 'photo'),
@@ -4114,6 +4203,10 @@ export async function createThreadsRuntime({
     }
 
     function refreshHoverButtonLayout() {
+        if (!isPerMediaDownloadEnabled()) {
+            cleanupPerMediaDownloadButton();
+            return;
+        }
         const hoverTargetIsValid = state.hoverElement &&
             isDownloadableHoverMedia(state.hoverElement) &&
             isPlausibleHoverRect(state.hoverElement.getBoundingClientRect());
@@ -4568,7 +4661,7 @@ export async function createThreadsRuntime({
         });
         state.observer = observer;
 
-        ensureHoverButton();
+        if (isPerMediaDownloadEnabled()) ensureHoverButton();
         scanInlineScriptsForVideoUrls();
     }
 
@@ -4609,6 +4702,7 @@ export async function createThreadsRuntime({
             downloadViaBlob,
             ensureCopyButtonsForBlocks,
             ensureDetailButton,
+            ensureHoverButton,
             extractPostBlockText,
             extractVideoUrlsFromText,
             finalizeModalItems,
@@ -4618,6 +4712,7 @@ export async function createThreadsRuntime({
             findShareSvgFromEvent,
             getPostBlockTextBoundary,
             getRenderedPostText,
+            hasOverlappingVideoControl,
             handlePostMediaModalKeydown,
             isModalControlIntent,
             getMediaUrlIdentity,
@@ -4772,9 +4867,24 @@ export async function createThreadsRuntime({
     }
 
     async function updateOptions(nextOptions) {
-        Object.assign(USER_OPTIONS, normalizeOptions(nextOptions));
+        Object.assign(USER_OPTIONS, normalizeOptions({ ...USER_OPTIONS, ...nextOptions }));
         if (started && !stopped && !IS_NODE_RUNTIME) applyUserOptions();
         return Object.freeze({ ...USER_OPTIONS });
+    }
+
+    async function updateMessage(nextMessage) {
+        if (typeof nextMessage !== 'function') throw new TypeError('message formatter is required');
+        message = nextMessage;
+        if (!started || stopped || IS_NODE_RUNTIME) return true;
+
+        await registerUserOptionMenu();
+        cleanupPerMediaDownloadButton();
+        cleanupCopyButtons();
+        cleanupDetailButton();
+        clearNativeShareContext('locale_change');
+        removeInjectedCleanLinkMenuItems();
+        refreshButtons({ scanNetwork: false });
+        return true;
     }
 
     function setCaptureRouteGeneration(nextGeneration) {
@@ -4812,6 +4922,7 @@ export async function createThreadsRuntime({
         start,
         stop,
         updateOptions,
+        updateMessage,
         setCaptureRouteGeneration,
         ingestCapturedMedia,
         testing

@@ -27,6 +27,7 @@ function fixture(initialConsent = acceptPageDisclosure()) {
     const navigation = new EventTargetStub();
     const runtimeMessages = [];
     const postedMessages = [];
+    const savedDocumentLocales = [];
     let storageListener = () => {};
     let intervalCallback = () => {};
     let mutationCallback = () => {};
@@ -49,11 +50,12 @@ function fixture(initialConsent = acceptPageDisclosure()) {
         saveConsent: async () => true,
         subscribeConsent(listener) { storageListener = listener; return () => {}; },
         async loadOptions() { return null; },
-        subscribeOptions() { return () => {}; }
+        subscribeOptions() { return () => {}; },
+        async saveDocumentLocale(language) { savedDocumentLocales.push(language); return language; }
     };
     const environment = {
         window,
-        document: { documentElement: {} },
+        document: { documentElement: { lang: '' } },
         chrome: { runtime: { async sendMessage(message) { runtimeMessages.push(message); return { ok: true }; } } }
     };
     return {
@@ -67,6 +69,11 @@ function fixture(initialConsent = acceptPageDisclosure()) {
             mutationCallback();
             intervalCallback();
         },
+        setDocumentLanguage(language) {
+            environment.document.documentElement.lang = language;
+            mutationCallback([{ type: 'attributes', attributeName: 'lang' }]);
+        },
+        savedDocumentLocales,
         runtimeMessages
         ,postedMessages
     };
@@ -114,6 +121,86 @@ test('content bootstrap injects the active chrome.i18n runtime translator', asyn
         runtimeOptions.message('downloadRequested', { filename: 'photo.jpg' }),
         '已提出下載要求：photo.jpg'
     );
+    await controller.stop();
+});
+
+test('content runtime follows live Threads document language changes without a Chrome restart', async () => {
+    const setup = fixture();
+    setup.environment.document.documentElement.lang = 'en';
+    setup.environment.chrome.i18n = {
+        getMessage(key) { return key === 'runtimeLocale' ? 'zh-TW' : ''; }
+    };
+    let initialMessage;
+    const updatedMessages = [];
+    const controller = await bootstrapChromeContent(setup.environment, {
+        createPlatformAdapter: () => setup.platform,
+        createRuntime: async (options) => {
+            initialMessage = options.message;
+            return {
+                async start() { return true; },
+                async stop() { return true; },
+                async updateOptions() {},
+                async updateMessage(nextMessage) { updatedMessages.push(nextMessage); },
+                ingestCapturedMedia() {}
+            };
+        }
+    });
+
+    assert.equal(initialMessage('copyPostText'), 'Copy Post Text');
+    assert.deepEqual(setup.savedDocumentLocales, ['en']);
+
+    setup.setDocumentLanguage('zh-Hant-TW');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(updatedMessages.at(-1)('copyPostText'), '複製這則貼文文字');
+    assert.deepEqual(setup.savedDocumentLocales, ['en', 'zh-Hant-TW']);
+    await controller.stop();
+});
+
+test('content bootstrap cannot miss an options change while its initial read is pending', async () => {
+    const setup = fixture();
+    const staleOptions = { enableCopyPostText: false, languagePreference: 'zh-TW' };
+    const latestOptions = { enableCopyPostText: true, languagePreference: 'en' };
+    let loadCalls = 0;
+    let releaseSecondLoad;
+    let secondLoadEntered;
+    let optionsListener;
+    const entered = new Promise((resolve) => { secondLoadEntered = resolve; });
+    const gate = new Promise((resolve) => { releaseSecondLoad = resolve; });
+    setup.platform.loadOptions = async () => {
+        loadCalls += 1;
+        if (loadCalls === 1) return staleOptions;
+        const snapshot = staleOptions;
+        secondLoadEntered();
+        await gate;
+        return snapshot;
+    };
+    setup.platform.subscribeOptions = (listener) => {
+        optionsListener = listener;
+        return () => { optionsListener = undefined; };
+    };
+
+    let runtimeOptions;
+    const bootstrap = bootstrapChromeContent(setup.environment, {
+        createPlatformAdapter: () => setup.platform,
+        createRuntime: async (options) => {
+            runtimeOptions = options;
+            return {
+                async start() { return true; },
+                async stop() { return true; },
+                async updateOptions() {},
+                async updateMessage() {},
+                ingestCapturedMedia() {}
+            };
+        }
+    });
+
+    await entered;
+    optionsListener?.(latestOptions);
+    releaseSecondLoad();
+    const controller = await bootstrap;
+
+    assert.equal(runtimeOptions.initialOptions.enableCopyPostText, true);
+    assert.equal(runtimeOptions.initialOptions.languagePreference, 'en');
     await controller.stop();
 });
 

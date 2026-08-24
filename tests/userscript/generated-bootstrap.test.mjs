@@ -71,8 +71,11 @@ test('generated userscript IIFE executes its real bootstrap and installs runtime
         await new Promise((resolve) => setImmediate(resolve));
     }
     assert.equal(styles, 1);
-    assert.equal(menus, 6);
-    assert.ok(menuLabels.some((label) => label.includes('Batch Download Picker')));
+    assert.equal(menus, 9);
+    assert.ok(menuLabels.some((label) => label.includes('Copy Original Link')));
+    assert.ok(menuLabels.some((label) => label.includes('Copy Post Text')));
+    assert.ok(menuLabels.some((label) => label.includes('Batch Media Download')));
+    assert.ok(menuLabels.some((label) => label.includes('Per-image Download Button')));
     assert.ok(menuLabels.some((label) => label.includes('Hover Scan Interval')));
     assert.ok(menuLabels.every((label) => !/[\u3400-\u9fff]/.test(label)));
     assert.equal(errors.length, 0);

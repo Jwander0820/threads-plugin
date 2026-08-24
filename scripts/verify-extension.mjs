@@ -79,11 +79,12 @@ const checks = [
     ['Traditional Chinese UI messages complete', hasCompleteMessages(zhMessages)],
     ['English UI messages complete', hasCompleteMessages(enMessages)],
     ['locale message keys stay aligned', sameValues(Object.keys(zhMessages), Object.keys(enMessages))],
-    ['runtime locale follows Chrome i18n with English fallback',
+    ['runtime locale follows Threads with manual override and Chrome fallback',
         zhMessages.runtimeLocale?.message === 'zh-TW' &&
         enMessages.runtimeLocale?.message === 'en' &&
-        /getExtensionMessage\(CHROME_RUNTIME_LOCALE_MESSAGE_KEY/.test(runtimeI18nSource) &&
-        /DEFAULT_LOCALE/.test(runtimeI18nSource)],
+        /getExtensionMessage\(\s*CHROME_RUNTIME_LOCALE_MESSAGE_KEY/.test(runtimeI18nSource) &&
+        /resolveInterfaceLocale/.test(runtimeI18nSource) &&
+        /documentLanguage/.test(runtimeI18nSource)],
     ['minimum Chrome version', manifest.minimum_chrome_version === '111'],
     ['exact extension permissions', sameValues(permissions, CHROME_EXTENSION_PERMISSIONS)],
     ['forbidden permissions absent', CHROME_FORBIDDEN_PERMISSIONS.every((permission) => !permissions.includes(permission))],
@@ -94,7 +95,8 @@ const checks = [
     ['content bundle includes disclosure gate', /showDisclosure/.test(contentSource) && /decideExtensionBootstrap/.test(contentSource)],
     ['content runtime receives Chrome i18n translator',
         /createChromeRuntimeMessage/.test(contentEntrySource) &&
-        /message:\s*createChromeRuntimeMessage\(environment\.chrome\)/.test(contentEntrySource) &&
+        /message:\s*createChromeRuntimeMessage\(environment\.chrome,\s*\{/.test(contentEntrySource) &&
+        /documentElement\?\.lang/.test(contentEntrySource) &&
         /SHARED_UI_MESSAGES/.test(runtimeI18nSource)],
     ['content runtime never hooks isolated-world network APIs', /captureSource:\s*null/.test(contentSource) && !/unsafeWindow/.test(contentSource)],
     ['bridge uses bounded validated records', /validateCaptureBridgeEvent/.test(contentEntrySource) && !/(?:responseText|rawResponse|bodyText)/.test(contentEntrySource)],
@@ -105,7 +107,19 @@ const checks = [
     ['static pages load packaged localization',
         /src="static-localization\.js"/.test(optionsHtml) &&
         /src="static-localization\.js"/.test(privacyHtml) &&
-        /localizeDocument/.test(staticLocalizationSource)],
+        /localizeStoredDocument/.test(staticLocalizationSource)],
+    ['manual language control is packaged',
+        optionsHtml.includes('id="language-preference"') &&
+        optionsSource.includes("'language-preference'") &&
+        ['languageHeading', 'languageAuto', 'languageTraditionalChinese', 'languageEnglish']
+            .every((key) => uiMessageKeys.has(key))],
+    ['four independent page feature controls are packaged',
+        [
+            'enable-copy-original-link',
+            'enable-copy-post-text',
+            'enable-batch-media-download',
+            'enable-per-media-download'
+        ].every((id) => optionsHtml.includes(`id="${id}"`) && optionsSource.includes(`'${id}'`))],
     ['static pages have no inline script',
         !/<script(?![^>]*\bsrc=)[^>]*>/i.test(optionsHtml + privacyHtml)],
     ['extension CSP has no unsafe eval', !/unsafe-eval/i.test(manifestText + contentSource + workerSource)]

@@ -31,11 +31,36 @@
     </section>
 
     <form id="options-form">
+      <section aria-labelledby="language-heading">
+        <h2 id="language-heading" data-i18n="languageHeading">介面語言</h2>
+        <label class="select-field">
+          <span data-i18n="languagePreferenceLabel">顯示語言</span>
+          <select id="language-preference">
+            <option value="auto" data-i18n="languageAuto">自動（跟隨 Threads）</option>
+            <option value="zh-TW" data-i18n="languageTraditionalChinese">繁體中文</option>
+            <option value="en" data-i18n="languageEnglish">English</option>
+          </select>
+        </label>
+        <p data-i18n="languageDescription">自動模式會跟隨目前 Threads 頁面的語言；尚未讀取到頁面語系時才使用 Chrome 介面語言。未提供翻譯的語言會回退英文。</p>
+      </section>
+
       <section aria-labelledby="feature-heading">
         <h2 id="feature-heading" data-i18n="featureHeading">頁面功能</h2>
         <label class="toggle">
-          <input id="enable-post-media-picker" type="checkbox">
-          <span data-i18n="batchPickerLabel">顯示貼文批次媒體選擇器</span>
+          <input id="enable-copy-original-link" type="checkbox">
+          <span data-i18n="copyOriginalLinkLabel">複製原始連結</span>
+        </label>
+        <label class="toggle">
+          <input id="enable-copy-post-text" type="checkbox">
+          <span data-i18n="copyPostTextLabel">複製本文</span>
+        </label>
+        <label class="toggle">
+          <input id="enable-batch-media-download" type="checkbox">
+          <span data-i18n="batchMediaDownloadLabel">下載圖片功能（批次）</span>
+        </label>
+        <label class="toggle">
+          <input id="enable-per-media-download" type="checkbox">
+          <span data-i18n="perMediaDownloadLabel">下載圖片功能（每張圖片左上角獨立下載）</span>
         </label>
         <label class="toggle">
           <input id="network-capture-enabled" type="checkbox">

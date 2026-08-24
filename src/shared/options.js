@@ -1,5 +1,11 @@
+import { normalizeLocalePreference } from './i18n.js';
+
 export const DEFAULT_OPTIONS = Object.freeze({
-    enablePostMediaPicker: true,
+    enableCopyOriginalLink: true,
+    enableCopyPostText: true,
+    enableBatchMediaDownload: true,
+    enablePerMediaDownload: true,
+    languagePreference: 'auto',
     hoverScanIntervalMs: 160,
     layoutRefreshIntervalMs: 260,
     backgroundScanIntervalMs: 5000,
@@ -19,8 +25,16 @@ export function normalizeOptions(value) {
     }
     if (!stored || typeof stored !== 'object') stored = {};
 
+    const enableBatchMediaDownload = typeof stored.enableBatchMediaDownload === 'boolean'
+        ? stored.enableBatchMediaDownload
+        : stored.enablePostMediaPicker !== false;
+
     return Object.freeze({
-        enablePostMediaPicker: stored.enablePostMediaPicker !== false,
+        enableCopyOriginalLink: stored.enableCopyOriginalLink !== false,
+        enableCopyPostText: stored.enableCopyPostText !== false,
+        enableBatchMediaDownload,
+        enablePerMediaDownload: stored.enablePerMediaDownload !== false,
+        languagePreference: normalizeLocalePreference(stored.languagePreference),
         hoverScanIntervalMs: normalizeNumber(stored.hoverScanIntervalMs, DEFAULT_OPTIONS.hoverScanIntervalMs, 0, 2000),
         layoutRefreshIntervalMs: normalizeNumber(stored.layoutRefreshIntervalMs, DEFAULT_OPTIONS.layoutRefreshIntervalMs, 0, 5000),
         backgroundScanIntervalMs: normalizeNumber(stored.backgroundScanIntervalMs, DEFAULT_OPTIONS.backgroundScanIntervalMs, 3000, 60000),

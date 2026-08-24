@@ -20,8 +20,17 @@
   "consentDescription": { "message": "Threads Plugin reads post text, links, and media information from Threads pages and adds feature buttons only after you enable it." },
   "enablePageProcessing": { "message": "Agree and Enable" },
   "revokeConsent": { "message": "Revoke Consent" },
+  "languageHeading": { "message": "Interface Language" },
+  "languagePreferenceLabel": { "message": "Display language" },
+  "languageAuto": { "message": "Automatic (follow Threads)" },
+  "languageTraditionalChinese": { "message": "Traditional Chinese" },
+  "languageEnglish": { "message": "English" },
+  "languageDescription": { "message": "Automatic mode follows the current Threads page language. Chrome's interface language is used only until a Threads language has been detected. Languages without a translation fall back to English." },
   "featureHeading": { "message": "Page Features" },
-  "batchPickerLabel": { "message": "Show the batch post media picker" },
+  "copyOriginalLinkLabel": { "message": "Copy original link" },
+  "copyPostTextLabel": { "message": "Copy post text" },
+  "batchMediaDownloadLabel": { "message": "Download media in batches" },
+  "perMediaDownloadLabel": { "message": "Show an individual download button at the top-left of each image or video" },
   "networkCaptureLabel": { "message": "Advanced network response capture (off by default)" },
   "networkCaptureDescription": { "message": "This feature intercepts known feed/post GraphQL responses in the main world of Threads pages and extracts only allowlisted post codes, media types, and media URLs. It does not run on sensitive routes such as login, messages, or settings, and it does not send data to a developer-operated server." },
   "networkCaptureReenablePrefix": { "message": "Re-enabling: " },
@@ -65,7 +74,7 @@
   "privacyUseP1": { "message": "Data is used only for the extension's single purpose: the Threads post media downloads, post-text copies, or clean-link copies you request, plus local media ordering, post and route isolation, UI display, consent, and security restrictions. Threads Plugin does not sell data, use it for advertising, profiling, credit, or lending decisions, or make it available for human reading by the developer or anyone else." },
   "privacyUseP2": { "message": "The extension does not send page content or media records to the developer or unrelated analytics, advertising, or tracking services. When you request a download, Chrome makes the necessary HTTPS request to the selected media's original and approved Threads, Instagram, CDN Instagram, or FBCDN host. That host receives the ordinary request needed to return the file. There is no other external transmission." },
   "privacyRetentionHeading": { "message": "Storage and Retention" },
-  "privacyRetentionP1": { "message": "stores only normalized feature and timing options plus consent state. It does not store post text, media URLs, browsing history, cookies, credentials, analytics identifiers, or downloaded content." },
+  "privacyRetentionP1": { "message": "stores only normalized feature, timing, and interface-language options, the last supported Threads document locale, and consent state. It does not store post text, media URLs, browsing history, cookies, credentials, analytics identifiers, or downloaded content." },
   "privacyRetentionP2": { "message": "Parsed text, links, and media records may remain in the current tab's memory while the consented runtime is active. Post and route identity checks prevent old records from being used for another post or route. These records are cleared when consent is revoked, the runtime stops, including after entering a sensitive route, or the tab closes, and the extension does not persist them." },
   "privacyRetentionP3": { "message": "Text or links you ask to copy are written to the operating-system clipboard and retained according to your operating system or clipboard-manager settings. Download URLs, filenames, Chrome download history, and downloaded files are retained according to Chrome and operating-system settings." },
   "privacyControlHeading": { "message": "Control and Revocation" },
@@ -81,6 +90,6 @@
   "privacyContactAfter": { "message": ". Do not include private post content, credentials, or other sensitive information in a public issue. Material policy changes will update this page's date and release notes." },
   "runtimeLocale": {
     "message": "en",
-    "description": "Selects the shared Threads page runtime catalog for the active Chrome locale."
+    "description": "Provides the Chrome UI locale used only when automatic mode has no Threads document locale."
   }
 }

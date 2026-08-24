@@ -37,3 +37,32 @@ test('Chrome adapter stores normalized options and bridges downloads', async () 
     assert.equal(writes.length, 1);
     assert.equal(typeof adapter.subscribeConsent, 'function');
 });
+
+test('Chrome adapter stores the resolved Threads document locale only when it changes', async () => {
+    const writes = [];
+    let storedLocale = '';
+    const chrome = {
+        storage: {
+            local: {
+                async get() { return { lastDocumentLocale: storedLocale }; },
+                async set(value) {
+                    writes.push(value);
+                    storedLocale = value.lastDocumentLocale;
+                }
+            },
+            onChanged: { addListener() {}, removeListener() {} }
+        },
+        runtime: {}
+    };
+    const adapter = createChromePlatformAdapter({ chrome });
+
+    assert.equal(await adapter.saveDocumentLocale('zh-Hant-TW'), 'zh-TW');
+    assert.equal(await adapter.saveDocumentLocale('zh-TW'), 'zh-TW');
+    assert.equal(await adapter.saveDocumentLocale('not a locale'), '');
+    assert.equal(await adapter.saveDocumentLocale('ja'), 'en');
+    assert.equal(await adapter.loadDocumentLocale(), 'en');
+    assert.deepEqual(writes, [
+        { lastDocumentLocale: 'zh-TW' },
+        { lastDocumentLocale: 'en' }
+    ]);
+});

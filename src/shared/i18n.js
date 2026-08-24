@@ -1,5 +1,11 @@
 export const DEFAULT_LOCALE = 'en';
 export const TRADITIONAL_CHINESE_LOCALE = 'zh-TW';
+export const AUTO_LOCALE_PREFERENCE = 'auto';
+export const LOCALE_PREFERENCES = Object.freeze([
+    AUTO_LOCALE_PREFERENCE,
+    DEFAULT_LOCALE,
+    TRADITIONAL_CHINESE_LOCALE
+]);
 
 const TRADITIONAL_CHINESE_TAG = /^zh-(?:tw|hant|hk|mo)(?:-|$)/i;
 const WELL_FORMED_LANGUAGE_TAG = /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/;
@@ -33,6 +39,23 @@ export function resolvePreferredLocale(languagePreferences) {
     return first && TRADITIONAL_CHINESE_TAG.test(first)
         ? TRADITIONAL_CHINESE_LOCALE
         : DEFAULT_LOCALE;
+}
+
+export function normalizeLocalePreference(value) {
+    return LOCALE_PREFERENCES.includes(value) ? value : AUTO_LOCALE_PREFERENCE;
+}
+
+export function resolveInterfaceLocale({
+    preference = AUTO_LOCALE_PREFERENCE,
+    documentLanguage = '',
+    fallbackLanguage = DEFAULT_LOCALE
+} = {}) {
+    const normalizedPreference = normalizeLocalePreference(preference);
+    if (normalizedPreference !== AUTO_LOCALE_PREFERENCE) return normalizedPreference;
+
+    const documentTag = getFirstValidLanguageTag(documentLanguage);
+    if (documentTag) return resolvePreferredLocale(documentTag);
+    return resolvePreferredLocale(fallbackLanguage);
 }
 
 export function createMessageFormatter({ locale = DEFAULT_LOCALE, catalogs }) {

@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+## [5.2.0] - 2026-08-24
+
+### Added
+
+- Added four independent, live-updating feature controls for original-link copy, post-text copy, batch media download, and per-media download buttons in both the Tampermonkey menu and Chrome Extension options page.
+- Added automatic migration from the previous batch-picker preference to the new batch-download setting.
+- Added an Automatic / Traditional Chinese / English interface-language setting for the Chrome Extension.
+
+### Fixed
+
+- Fixed Chrome Extension controls, options, and privacy pages staying in Chinese after Threads switched to English or Japanese. Automatic mode now follows the live Threads document language, persists the last supported locale for extension-owned pages, and falls back to English for untranslated languages without requiring a Chrome restart.
+- Prevented a pending batch-media resolution from starting a download after the batch feature is disabled.
+- Prevented Chrome content startup from missing a feature or language setting change between its initial storage read and change subscription.
+- Recognized Japanese and Chinese playback-control labels when identifying image-backed video thumbnails.
+
 ## [5.1.0] - 2026-08-13
 
 ### Added

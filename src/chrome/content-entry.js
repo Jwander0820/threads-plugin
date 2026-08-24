@@ -60,6 +60,8 @@ export async function bootstrapChromeContent(environment = globalThis, dependenc
     let bridgeEnabled = false;
     let disposed = false;
     let currentPageUrl = environment.window.location.href;
+    let currentDocumentLanguage = environment.document.documentElement?.lang || '';
+    let currentOptions = normalizeOptions(null);
     let currentRouteGeneration = '';
     let captureBridgeState = null;
 
@@ -148,35 +150,76 @@ export async function bootstrapChromeContent(environment = globalThis, dependenc
     const startRuntime = async () => {
         if (runtime) return runtime;
         const requestedUrl = environment.window.location.href;
-        const instance = await createRuntime({
-            platform,
-            captureSource: null,
-            document: environment.document,
-            window: environment.window,
-            initialOptions: normalizeOptions(await platform.loadOptions()),
-            clock: environment,
-            message: createChromeRuntimeMessage(environment.chrome)
+        let instance = null;
+        let optionsChanged = false;
+        const applyRuntimeOptions = (options) => {
+            currentOptions = normalizeOptions(options);
+            optionsChanged = true;
+            if (!instance) return;
+            void instance.updateOptions(currentOptions);
+            void instance.updateMessage?.(createChromeRuntimeMessage(environment.chrome, {
+                languagePreference: currentOptions.languagePreference,
+                documentLanguage: environment.document.documentElement?.lang || ''
+            }));
+        };
+        unsubscribeOptions = platform.subscribeOptions((options) => {
+            applyRuntimeOptions(options);
         });
-        if (lifecycle.latestValue !== undefined &&
-            !decideBootstrap(lifecycle.latestValue, environment.window.location.href).startRuntime) {
-            await instance.stop();
-            return runtime;
-        }
-        if (disposed || environment.window.location.href !== requestedUrl ||
-            !decideBootstrap(lifecycle.latestValue, environment.window.location.href).startRuntime) {
-            await instance.stop();
-            return runtime;
-        }
-        runtime = instance;
-        const started = await instance.start();
-        if (!started || runtime !== instance || disposed ||
-            !decideBootstrap(lifecycle.latestValue, environment.window.location.href).startRuntime) {
+        const unsubscribePendingOptions = () => {
+            unsubscribeOptions();
+            unsubscribeOptions = () => {};
+        };
+
+        try {
+            const storedOptions = normalizeOptions(await platform.loadOptions());
+            if (!optionsChanged) currentOptions = storedOptions;
+            const initialOptions = currentOptions;
+            optionsChanged = false;
+            currentDocumentLanguage = environment.document.documentElement?.lang || '';
+            if (currentDocumentLanguage) {
+                await platform.saveDocumentLocale?.(currentDocumentLanguage);
+            }
+            instance = await createRuntime({
+                platform,
+                captureSource: null,
+                document: environment.document,
+                window: environment.window,
+                initialOptions,
+                clock: environment,
+                message: createChromeRuntimeMessage(environment.chrome, {
+                    languagePreference: initialOptions.languagePreference,
+                    documentLanguage: currentDocumentLanguage
+                })
+            });
+            if (optionsChanged) applyRuntimeOptions(currentOptions);
+            if (lifecycle.latestValue !== undefined &&
+                !decideBootstrap(lifecycle.latestValue, environment.window.location.href).startRuntime) {
+                unsubscribePendingOptions();
+                await instance.stop();
+                return runtime;
+            }
+            if (disposed || environment.window.location.href !== requestedUrl ||
+                !decideBootstrap(lifecycle.latestValue, environment.window.location.href).startRuntime) {
+                unsubscribePendingOptions();
+                await instance.stop();
+                return runtime;
+            }
+            runtime = instance;
+            const started = await instance.start();
+            if (!started || runtime !== instance || disposed ||
+                !decideBootstrap(lifecycle.latestValue, environment.window.location.href).startRuntime) {
+                unsubscribePendingOptions();
+                if (runtime === instance) runtime = null;
+                await instance.stop();
+                return runtime;
+            }
+            return instance;
+        } catch (error) {
+            unsubscribePendingOptions();
             if (runtime === instance) runtime = null;
-            await instance.stop();
-            return runtime;
+            await instance?.stop?.();
+            throw error;
         }
-        unsubscribeOptions = platform.subscribeOptions((options) => void instance.updateOptions(options));
-        return instance;
     };
 
     const stopRuntime = async () => {
@@ -205,6 +248,10 @@ export async function bootstrapChromeContent(environment = globalThis, dependenc
                 disclosureVisible = true;
                 const removeDisclosure = renderDisclosure({
                     document: environment.document,
+                    getMessage: createChromeRuntimeMessage(environment.chrome, {
+                        languagePreference: currentOptions.languagePreference,
+                        documentLanguage: environment.document.documentElement?.lang || ''
+                    }),
                     onAccept: async (acceptedConsent) => {
                         await platform.saveConsent(acceptedConsent);
                         await lifecycle.update(acceptedConsent);
@@ -293,15 +340,40 @@ export async function bootstrapChromeContent(environment = globalThis, dependenc
     };
     environment.window.navigation?.addEventListener?.('navigate', onNavigate);
     environment.window.navigation?.addEventListener?.('currententrychange', reconcileRoute);
+    const reconcileDocument = () => {
+        reconcileRoute();
+        const nextLanguage = environment.document.documentElement?.lang || '';
+        if (!nextLanguage || nextLanguage === currentDocumentLanguage) return;
+        currentDocumentLanguage = nextLanguage;
+        if (disclosureVisible) {
+            disposeDisclosure();
+            disposeDisclosure = () => {};
+            void lifecycle.refresh().catch((error) => {
+                reportContentError('locale disclosure refresh failed', error);
+            });
+        }
+        if (!runtime) return;
+        void platform.saveDocumentLocale?.(nextLanguage);
+        void runtime.updateMessage?.(createChromeRuntimeMessage(environment.chrome, {
+            languagePreference: currentOptions.languagePreference,
+            documentLanguage: nextLanguage
+        }));
+    };
     const routeObserver = typeof environment.window.MutationObserver === 'function'
-        ? new environment.window.MutationObserver(reconcileRoute)
+        ? new environment.window.MutationObserver(reconcileDocument)
         : null;
     routeObserver?.observe(environment.document.documentElement || environment.document, {
         childList: true,
-        subtree: true
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['lang']
     });
 
-    const consent = await platform.loadConsent();
+    const [consent, initialOptions] = await Promise.all([
+        platform.loadConsent(),
+        platform.loadOptions()
+    ]);
+    currentOptions = normalizeOptions(initialOptions);
     if (receivedConsentChange) await lifecycle.refresh();
     else await requestReconcile(consent);
 

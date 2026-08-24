@@ -1,5 +1,7 @@
 # Threads Plugin executive security and Store-readiness review
 
+> Historical 5.1.0 release ledger. It must not be treated as 5.2.0 release approval; 5.2.0 requires a freshly packaged ZIP and a new complete security/manual sign-off.
+
 ## Decision rule
 
 This is the release-owner Go/No-Go ledger for Threads Plugin 5.1.0. A **Go** decision requires all automated gates, every item in `docs/manual-test-checklist.md`, the public privacy-policy URL, current-product Store assets, and the final evidence/sign-off fields to pass against the exact production ZIP. Any unresolved Critical or High finding is an automatic **No-Go**.

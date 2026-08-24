@@ -1,6 +1,11 @@
 import { normalizeConsentState } from '../shared/consent-state.js';
+import { getFirstValidLanguageTag, resolveInterfaceLocale } from '../shared/i18n.js';
 import { normalizeOptions } from '../shared/options.js';
-import { CONSENT_STORAGE_KEY, OPTIONS_STORAGE_KEY } from './storage-keys.js';
+import {
+    CONSENT_STORAGE_KEY,
+    LAST_DOCUMENT_LOCALE_STORAGE_KEY,
+    OPTIONS_STORAGE_KEY
+} from './storage-keys.js';
 
 function runtimeError(response) {
     const code = response?.error || 'download_failed';
@@ -32,6 +37,21 @@ export function createChromePlatformAdapter(environment = globalThis) {
             };
             chromeApi.storage.onChanged.addListener(onChanged);
             return () => chromeApi.storage.onChanged.removeListener(onChanged);
+        },
+        async loadDocumentLocale() {
+            const stored = await chromeApi.storage.local.get(LAST_DOCUMENT_LOCALE_STORAGE_KEY);
+            return typeof stored[LAST_DOCUMENT_LOCALE_STORAGE_KEY] === 'string'
+                ? stored[LAST_DOCUMENT_LOCALE_STORAGE_KEY]
+                : '';
+        },
+        async saveDocumentLocale(documentLanguage) {
+            const validLanguage = getFirstValidLanguageTag(documentLanguage);
+            if (!validLanguage) return '';
+            const locale = resolveInterfaceLocale({ documentLanguage: validLanguage });
+            const stored = await chromeApi.storage.local.get(LAST_DOCUMENT_LOCALE_STORAGE_KEY);
+            if (stored[LAST_DOCUMENT_LOCALE_STORAGE_KEY] === locale) return locale;
+            await chromeApi.storage.local.set({ [LAST_DOCUMENT_LOCALE_STORAGE_KEY]: locale });
+            return locale;
         },
         async loadConsent() {
             const stored = await chromeApi.storage.local.get(CONSENT_STORAGE_KEY);

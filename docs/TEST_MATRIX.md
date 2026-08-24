@@ -1,5 +1,7 @@
 # Threads Plugin 5.1.0 test matrix
 
+> Historical 5.1.0 release evidence. For 5.2.0, the owner has initially confirmed the new language selection and four independent feature controls on 2026-08-24, and the automated suite has been rerun locally. This does not replace a new exact-ZIP clean-profile matrix, service-worker restart check, Tampermonkey regression run, checksum, or final release sign-off.
+
 ## Release-candidate identity
 
 - Source date: 2026-08-13 (Asia/Taipei)
