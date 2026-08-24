@@ -12,7 +12,7 @@ const packageData = JSON.parse(await readFile(resolve(REPOSITORY_ROOT, 'package.
 const currentVersion = packageData.version;
 
 const required = [
-    ['README.md', ['Threads Plugin 是一套 Threads 貼文內容工具', 'Tampermonkey', 'Chrome Extension', 'npm.cmd run verify', 'PRIVACY.md']],
+    ['README.md', ['Threads Plugin 是一套 Threads 貼文內容工具', 'Tampermonkey', 'Chrome 擴充功能', 'npm.cmd run verify', 'PRIVACY.md']],
     ['docs/ARCHITECTURE.md', ['Scope and source-of-truth rule', 'Chrome execution worlds', 'Consent and data lifecycle', 'Build, test, and release flow', 'Security and maintenance invariants']],
     ['docs/TEST_MATRIX.md', ['Automated evidence', 'Security invariant evidence (S1–S18)', 'Local browser fixture evidence', 'Cross-platform functional matrix', 'Chrome privacy and lifecycle matrix', 'Store and production matrix', 'Completion boundary']],
     ['PRIVACY.md', ['Data handled', 'Necessary destinations and sharing', 'operating-system clipboard', 'User control', 'Chrome Web Store Limited Use', 'Limited Use requirements']],

@@ -1,21 +1,27 @@
-# Threads Plugin
+<p align="center">
+  <img src="extension/icons/icon-128.png" alt="Threads Plugin icon" width="96" height="96">
+</p>
 
-Threads Plugin 是一套 Threads 貼文內容工具，提供 Tampermonkey userscript 與 Manifest V3 Chrome Extension 兩種版本。
+<h1 align="center">Threads Plugin</h1>
+
+<p align="center">Threads 貼文下載、文字複製與乾淨連結工具</p>
+
+<p align="center">
+  <a href="https://chromewebstore.google.com/detail/threads-plugin-clean-link/ebgjgcallolfhondokaipglckandpkhc"><strong>Chrome Web Store</strong></a>
+  ·
+  <a href="https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/threads-plugin.user.js"><strong>Tampermonkey Userscript</strong></a>
+</p>
+
+Threads Plugin 是一套 Threads 貼文內容工具，提供 Tampermonkey 腳本與 Chrome 擴充功能兩種版本。
 
 它可以直接在 Threads 貼文旁下載圖片或影片、選擇輪播媒體批次下載、複製貼文文字，以及取得移除追蹤參數的乾淨連結。
 
 ## 功能
 
-- 下載單張圖片或影片。
-- 依原始順序顯示圖片／影片混合輪播，並批次下載勾選項目。
-- 複製清理介面文字後的貼文內容。
-- 複製移除已知追蹤參數的貼文連結。
-- 在 Threads 原生分享選單中加入乾淨連結操作。
-- 可各自開關「複製原始連結」、「複製本文」、「批次下載」與「每張媒體左上角獨立下載」四項功能。
-- 隔離引用、回覆與外層貼文，避免下載到錯誤媒體。
-- 支援 Threads 單頁導覽，切換貼文後不沿用上一頁的媒體資料。
-- 支援鍵盤操作、焦點管理與 Escape 關閉媒體選擇器。
-- Chrome Extension 可自動跟隨 Threads 文件語系，或手動固定為繁體中文／英文；未提供翻譯的語言回退英文。
+- 單張或批次下載 Threads 貼文中的圖片與影片。
+- 複製整理後的貼文文字。
+- 複製移除追蹤參數的乾淨連結，也可從 Threads 分享選單使用。
+- 下載、文字與連結工具皆可個別開關。
 
 ## 支援平台
 
@@ -23,26 +29,17 @@ Threads Plugin 是一套 Threads 貼文內容工具，提供 Tampermonkey usersc
 
 正式 userscript 是 repo 根目錄的 [`threads-plugin.user.js`](threads-plugin.user.js)。
 
-安裝 Tampermonkey 後，可由以下網址安裝 GitHub Raw 版本：
-
-```text
-https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/threads-plugin.user.js
-```
+安裝 Tampermonkey 後，可直接[安裝 GitHub Raw 版本](https://raw.githubusercontent.com/Jwander0820/threads-plugin/main/threads-plugin.user.js)。
 
 Greasy Fork 安裝版由 Greasy Fork 提供更新；兩種來源請擇一使用，避免重複注入。
 
-### Chrome Extension
+### Chrome 擴充功能
 
-Chrome Web Store 版本尚未上架。目前可從 source 建置後，以開發人員模式載入：
+Chrome 擴充功能已於 Chrome Web Store 正式上線，可直接安裝並由 Chrome 接收後續更新：
 
-```powershell
-npm.cmd ci
-npm.cmd run build
-```
+[**從 Chrome Web Store 安裝 Threads Plugin**](https://chromewebstore.google.com/detail/threads-plugin-clean-link/ebgjgcallolfhondokaipglckandpkhc)
 
-開啟 `chrome://extensions`、啟用「開發人員模式」，再以「載入未封裝項目」選擇 `dist/chrome-extension`。
-
-測試 Chrome Extension 時請停用 Tampermonkey 中的 Threads Plugin。
+使用 Chrome 擴充功能時，請停用 Tampermonkey 中的 Threads Plugin，避免同一頁面重複載入工具。
 
 ## 使用方式
 
@@ -52,9 +49,9 @@ npm.cmd run build
 2. 使用貼文工具列開啟媒體選擇器，勾選需要的圖片或影片。
 3. 使用文字或連結按鈕複製貼文內容與乾淨連結。
 
-四項頁面功能可以獨立啟用。Chrome Extension 請從擴充功能設定頁調整；Tampermonkey 版請從腳本管理器的 Threads Plugin 選單切換。變更會套用到目前已開啟的 Threads 頁面，不需要重新載入。
+四項頁面功能可以獨立啟用。Chrome 擴充功能請從設定頁調整；Tampermonkey 版請從腳本管理器的 Threads Plugin 選單切換。變更會套用到目前已開啟的 Threads 頁面，不需要重新載入。
 
-Chrome Extension 的介面語言預設為「自動（跟隨 Threads）」。設定與隱私頁會沿用最近一次有效的 Threads 語系；也可在設定頁手動固定語言，不需要重啟 Chrome。
+Chrome 擴充功能預設跟隨 Threads 語言，也可在設定頁手動選擇繁體中文或英文。
 
 Chrome 版第一次使用時會先顯示頁面內容處理說明；同意後才會啟用貼文工具。進階網路擷取預設關閉，只有另外確認後才會啟用，並可隨時從設定頁停用或撤銷。
 
@@ -75,7 +72,7 @@ npm.cmd run build
 npm.cmd run verify
 ```
 
-build 會更新根目錄的 Tampermonkey 成品 `threads-plugin.user.js`，並在 `dist/chrome-extension` 產生 Chrome Extension。
+build 會更新根目錄的 Tampermonkey 成品 `threads-plugin.user.js`，並在 `dist/chrome-extension` 產生 Chrome 擴充功能。
 
 專案結構、測試、安全與維護規則請參閱：
 
