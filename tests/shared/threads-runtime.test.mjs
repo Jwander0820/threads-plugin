@@ -341,6 +341,8 @@ test('post text cleaner removes only a trailing standalone English Translate lab
     assert.equal(cleanPostTextFragment('\r\nHello\r\n'), 'Hello');
     assert.equal(cleanPostTextFragment('Hello \t\u00a0'), 'Hello');
     assert.equal(cleanPostTextFragment('Hello\r\nWorld'), 'Hello\nWorld');
+    assert.equal(cleanPostTextFragment('有濾鏡就完蛋了><\u00a0\n2\n/\n2'), '有濾鏡就完蛋了><');
+    assert.equal(cleanPostTextFragment('作者'), '作者');
 
     const postRect = { left: 0, top: 0, width: 320, height: 42, right: 320, bottom: 42 };
     const uiRect = { left: 240, top: 21, width: 70, height: 21, right: 310, bottom: 42 };
@@ -460,6 +462,253 @@ test('post text extractor keeps every text segment when one contains a small inl
         runtime.testing.extractPostBlockText(root, actionBar),
         `${titleText}\n${farmText}`
     );
+});
+
+test('post text extractor removes carousel and reply-context UI from a quoted post', async () => {
+    const makeRect = (left, top, width, height) => ({
+        left,
+        top,
+        width,
+        height,
+        right: left + width,
+        bottom: top + height
+    });
+    const quotedText = {
+        innerText: '有濾鏡就完蛋了><\u00a0\n2\n/\n2',
+        getBoundingClientRect: () => makeRect(160, 100, 420, 90),
+        matches: (selector) => selector === '[dir="auto"]',
+        contains(candidate) { return candidate === this; },
+        closest() { return null; },
+        querySelector() { return null; },
+        querySelectorAll() { return []; }
+    };
+    const replyContext = {
+        innerText: '正在回覆 @jwander87',
+        getBoundingClientRect: () => makeRect(160, 200, 240, 24),
+        matches: (selector) => selector === '[dir="auto"]',
+        parentElement: null,
+        contains(candidate) { return candidate === this; },
+        closest(selector) {
+            return selector === '[data-pressable-container]' ? nestedPostBoundary : null;
+        },
+        querySelector() { return null; },
+        querySelectorAll() { return []; }
+    };
+    const nestedBodyText = {
+        innerText: '放個平在這邊被揍一輩子(X\n齁齁 有濾鏡(*´艸`*)',
+        getBoundingClientRect: () => makeRect(160, 230, 420, 48),
+        matches: (selector) => selector === '[dir="auto"]',
+        contains(candidate) { return candidate === this; },
+        closest(selector) {
+            if (selector === '[data-pressable-container]') return nestedPostBoundary;
+            if (selector === 'a[href]') return nestedPostLink;
+            return null;
+        },
+        querySelector() { return null; },
+        querySelectorAll() { return []; }
+    };
+    const timeNode = {
+        getBoundingClientRect: () => makeRect(250, 150, 80, 21)
+    };
+    const headerRow = {
+        getBoundingClientRect: () => makeRect(160, 140, 420, 40),
+        querySelector(selector) {
+            return selector === 'time[datetime], time' ? timeNode : null;
+        }
+    };
+    const metadataRow = {
+        parentElement: null,
+        previousElementSibling: headerRow,
+        nextElementSibling: null,
+        getBoundingClientRect: () => makeRect(160, 184, 420, 24)
+    };
+    const contentRow = {
+        previousElementSibling: metadataRow,
+        getBoundingClientRect: () => makeRect(160, 212, 420, 70)
+    };
+    const nestedPostBoundary = {
+        matches(selector) {
+            return selector.includes('[data-pressable-container]');
+        },
+        querySelector(selector) {
+            if (selector.includes('time')) return timeNode;
+            return selector.includes('a[href') ? nestedPostLink : null;
+        },
+        querySelectorAll(selector) {
+            if (selector === '[dir="auto"]') return [replyContext, nestedBodyText];
+            if (selector === 'img, video' || selector === '[aria-label]') return [];
+            if (selector.includes('a[href*="/post/"]')) return [nestedPostLink];
+            return [];
+        },
+        contains(candidate) {
+            return [
+                this, replyContext, nestedBodyText, metadataRow, contentRow,
+                headerRow, timeNode, nestedPostLink, nestedActionBar
+            ].includes(candidate);
+        },
+        getBoundingClientRect: () => makeRect(140, 120, 460, 220)
+    };
+    const actionBar = {
+        getBoundingClientRect: () => makeRect(160, 360, 420, 40),
+        closest: () => root
+    };
+    const postLink = {
+        href: 'https://www.threads.com/@jwander87/post/Dcu-bo0AT6C',
+        closest: () => root,
+        contains: () => false,
+        getBoundingClientRect: () => makeRect(160, 70, 120, 20)
+    };
+    const nestedPostLink = {
+        href: 'https://www.threads.com/@jwander87/post/DcblFGej8YO',
+        getAttribute(name) { return name === 'href' ? this.href : null; },
+        closest: () => nestedPostBoundary,
+        contains(candidate) { return candidate === nestedBodyText; },
+        getBoundingClientRect: () => makeRect(160, 212, 420, 70)
+    };
+    const nestedActionBar = {
+        getBoundingClientRect: () => makeRect(160, 310, 420, 30),
+        closest: () => nestedPostBoundary
+    };
+    replyContext.parentElement = metadataRow;
+    metadataRow.parentElement = nestedPostBoundary;
+    metadataRow.nextElementSibling = contentRow;
+    const root = {
+        matches: () => false,
+        contains(candidate) {
+            return [
+                this, quotedText, replyContext, nestedBodyText, nestedPostBoundary,
+                metadataRow, contentRow, headerRow, timeNode, actionBar, postLink,
+                nestedPostLink, nestedActionBar
+            ].includes(candidate);
+        },
+        getBoundingClientRect: () => makeRect(140, 40, 460, 420),
+        querySelector: () => null,
+        querySelectorAll(selector) {
+            if (selector === '[dir="auto"]') return [quotedText, replyContext, nestedBodyText];
+            if (selector === 'img, video' || selector === '[aria-label]') return [];
+            if (selector.includes('a[href*="/post/"]')) return [postLink];
+            return [];
+        }
+    };
+    const runtime = await createThreadsRuntime({
+        platform: fakePlatform(),
+        document: { body: root, documentElement: {}, querySelectorAll: () => [] },
+        window: {
+            innerWidth: 1280,
+            innerHeight: 900,
+            getComputedStyle(element) {
+                const isMetadata = element === replyContext || element === timeNode;
+                return {
+                    whiteSpace: 'pre-wrap',
+                    color: isMetadata ? 'rgb(119, 119, 119)' : 'rgb(243, 245, 247)'
+                };
+            }
+        },
+        initialOptions: {}
+    });
+
+    assert.equal(runtime.testing.isInsideNestedPostBlock(replyContext, root), true);
+    assert.equal(runtime.testing.isInsideNestedPostBlock(replyContext, nestedPostBoundary), false);
+    assert.equal(runtime.testing.extractPostBlockText(root, actionBar), '有濾鏡就完蛋了><');
+    assert.equal(
+        runtime.testing.extractPostBlockText(nestedPostBoundary, nestedActionBar),
+        '放個平在這邊被揍一輩子(X\n齁齁 有濾鏡(*´艸`*)'
+    );
+});
+
+test('post text extractor excludes inline author badges from the timestamp header row', async () => {
+    const makeRect = (left, top, width, height) => ({
+        left,
+        top,
+        width,
+        height,
+        right: left + width,
+        bottom: top + height
+    });
+    const timeNode = {
+        parentElement: null,
+        getBoundingClientRect: () => makeRect(250, 80, 72, 21),
+        querySelector: () => null
+    };
+    const metadataGroup = { parentElement: null };
+    const makeMetadata = (innerText, left, width) => ({
+        innerText,
+        parentElement: metadataGroup,
+        getBoundingClientRect: () => makeRect(left, 80, width, 21),
+        matches: (selector) => selector === '[dir="auto"]',
+        contains(candidate) { return candidate === this; },
+        closest() { return null; },
+        querySelector: () => null,
+        querySelectorAll: () => []
+    });
+    const separator = makeMetadata('·', 328, 4);
+    const authorBadge = makeMetadata('作者', 338, 30);
+    const headerRow = {
+        parentElement: null,
+        getBoundingClientRect: () => makeRect(160, 70, 420, 42),
+        querySelector(selector) {
+            return selector === 'time[datetime], time' || selector === 'time' ? timeNode : null;
+        }
+    };
+    metadataGroup.parentElement = headerRow;
+    timeNode.parentElement = headerRow;
+    const bodyText = {
+        innerText: '但這個應該能算一部分XD',
+        parentElement: null,
+        getBoundingClientRect: () => makeRect(160, 120, 420, 24),
+        matches: (selector) => selector === '[dir="auto"]',
+        contains(candidate) { return candidate === this; },
+        closest() { return null; },
+        querySelector: () => null,
+        querySelectorAll: () => []
+    };
+    const actionBar = {
+        getBoundingClientRect: () => makeRect(160, 180, 420, 40),
+        closest: () => root
+    };
+    const postLink = {
+        href: 'https://www.threads.com/@jwander87/post/DVT2lVkAWPi',
+        closest: () => root,
+        contains: () => false,
+        getBoundingClientRect: () => makeRect(160, 80, 120, 20)
+    };
+    const root = {
+        matches: () => false,
+        contains(candidate) {
+            return [
+                this, timeNode, metadataGroup, separator, authorBadge, headerRow,
+                bodyText, actionBar, postLink
+            ].includes(candidate);
+        },
+        getBoundingClientRect: () => makeRect(140, 40, 460, 220),
+        querySelector: () => null,
+        querySelectorAll(selector) {
+            if (selector === '[dir="auto"]') return [separator, authorBadge, bodyText];
+            if (selector === 'img, video' || selector === '[aria-label]') return [];
+            if (selector.includes('a[href*="/post/"]')) return [postLink];
+            return [];
+        }
+    };
+    headerRow.parentElement = root;
+    bodyText.parentElement = root;
+    const runtime = await createThreadsRuntime({
+        platform: fakePlatform(),
+        document: { body: root, documentElement: {}, querySelectorAll: () => [] },
+        window: {
+            innerWidth: 1280,
+            innerHeight: 900,
+            getComputedStyle(element) {
+                const isMetadata = [timeNode, separator, authorBadge].includes(element);
+                return {
+                    whiteSpace: 'pre-line',
+                    color: isMetadata ? 'rgb(119, 119, 119)' : 'rgb(243, 245, 247)'
+                };
+            }
+        },
+        initialOptions: {}
+    });
+
+    assert.equal(runtime.testing.extractPostBlockText(root, actionBar), '但這個應該能算一部分XD');
 });
 
 test('real runtime injection supports Japanese structure while English and Traditional Chinese stay intact', async () => {

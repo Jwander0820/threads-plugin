@@ -1817,6 +1817,7 @@
       if (normalizedUiLabels.length === 0) {
         output = output.replace(/[ \t\u00a0]*(?:\n[ \t\u00a0]*)?(?:翻譯|查看翻譯)[ \t\u00a0]*$/i, "").replace(/[ \t\u00a0]*\n[ \t\u00a0]*(?:Translate|翻訳)[ \t\u00a0]*(?:\n[ \t\u00a0]*)*$/, "");
       }
+      output = stripTrailingCarouselCounter(output);
       return output.replace(/[ \t\u00a0]+$/g, "").replace(/^\n+|\n+$/g, "");
     }
     function getRenderedPostText(element) {
@@ -1847,8 +1848,50 @@
         rootRect.bottom
       );
     }
+    function isPostHeaderMetadataTextElement(element, root) {
+      if (!element?.matches?.('[dir="auto"]') || element.closest?.("a[href]")) return false;
+      const metadataRow = element.parentElement;
+      const headerRow = metadataRow?.previousElementSibling;
+      const contentRow = metadataRow?.nextElementSibling;
+      if (!metadataRow || !headerRow || !contentRow || !root.contains(metadataRow)) return false;
+      const timeElement = headerRow.querySelector?.("time[datetime], time");
+      if (!timeElement) return false;
+      const metadataColor = String(window.getComputedStyle(element)?.color || "");
+      const timeColor = String(window.getComputedStyle(timeElement)?.color || "");
+      if (!metadataColor || metadataColor !== timeColor) return false;
+      const headerRect = headerRow.getBoundingClientRect?.();
+      const metadataRect = metadataRow.getBoundingClientRect?.();
+      const contentRect = contentRow.getBoundingClientRect?.();
+      return Boolean(
+        headerRect && metadataRect && contentRect && metadataRect.top >= headerRect.bottom - 2 && contentRect.top >= metadataRect.bottom - 2
+      );
+    }
+    function isInlinePostHeaderMetadataTextElement(element, root) {
+      if (!element?.matches?.('[dir="auto"]')) return false;
+      const elementRect = element.getBoundingClientRect?.();
+      const elementColor = String(window.getComputedStyle(element)?.color || "");
+      if (!elementRect || !elementColor) return false;
+      let ancestor = element.parentElement;
+      for (let depth = 0; ancestor && ancestor !== root && depth < 6; depth += 1) {
+        const ancestorRect = ancestor.getBoundingClientRect?.();
+        const timeElement = ancestor.matches?.("time[datetime], time") ? ancestor : ancestor.querySelector?.("time[datetime], time");
+        if (ancestorRect && ancestorRect.height <= 64 && timeElement) {
+          const timeRect = timeElement.getBoundingClientRect?.();
+          const timeColor = String(window.getComputedStyle(timeElement)?.color || "");
+          const overlap = timeRect ? Math.min(elementRect.bottom, timeRect.bottom) - Math.max(elementRect.top, timeRect.top) : 0;
+          if (timeColor === elementColor && overlap >= Math.min(elementRect.height, timeRect?.height || 0) * 0.5) {
+            return true;
+          }
+        }
+        ancestor = ancestor.parentElement;
+      }
+      return false;
+    }
     function isExcludedPostBlockTextElement(element, root, boundaryTop, postInfo) {
       if (!element || !root.contains(element)) return true;
+      if (isInsideNestedPostBlock(element, root)) return true;
+      if (isPostHeaderMetadataTextElement(element, root)) return true;
+      if (isInlinePostHeaderMetadataTextElement(element, root)) return true;
       if (element.closest(`.${POST_TOOL_CLASS}, .${COPY_TOOL_CLASS}, .${LINK_TOOL_CLASS}, .${BUTTON_CLASS}, #${MODAL_ID}`)) return true;
       const interactiveAncestor = element.closest('button, [role="button"], nav');
       if (interactiveAncestor && interactiveAncestor !== root && root.contains(interactiveAncestor)) return true;
