@@ -719,6 +719,7 @@
     resetSettings: "Reset Threads Downloader Settings",
     postTextNotFound: "Could not find text for this post.",
     postTextCopied: "Post text copied to the clipboard.",
+    copyFailed: "Could not copy to the clipboard. Please try again.",
     postLinkNotFound: "Could not find a link for this post.",
     cleanLinkCopied: "Clean link copied to the clipboard.",
     downloadRequested: "Download requested: {filename}",
@@ -769,6 +770,7 @@
     resetSettings: "還原 Threads 下載器預設設定",
     postTextNotFound: "找不到這則貼文的文字。",
     postTextCopied: "這則貼文的文字已複製到剪貼簿。",
+    copyFailed: "無法複製到剪貼簿，請重試。",
     postLinkNotFound: "找不到這則貼文的連結。",
     cleanLinkCopied: "已複製無追蹤碼連結。",
     downloadRequested: "已提出下載要求：{filename}",
@@ -1764,10 +1766,17 @@
       if (now - token.createdAt > USER_ACTIVATION_TOKEN_MAX_AGE_MS) return false;
       return token.routeKey === getMediaRouteKey();
     }
-    function copyText(text, activationToken) {
-      if (!isValidUserActivationToken(activationToken)) return false;
-      Promise.resolve(platform.writeClipboard(text)).catch(() => {
-      });
+    async function copyText(text, activationToken, successMessage) {
+      if (stopped || !isValidUserActivationToken(activationToken)) return false;
+      const canNotify = () => !stopped && isValidUserActivationToken(activationToken);
+      try {
+        if (await platform.writeClipboard(text) === false) throw new Error("clipboard_write_failed");
+      } catch {
+        if (canNotify()) toast(message("copyFailed"));
+        return false;
+      }
+      if (!canNotify()) return false;
+      if (successMessage) toast(message(successMessage));
       return true;
     }
     function buildCleanThreadsPostUrl(postInfo) {
@@ -1981,9 +1990,7 @@
         toast(message("postTextNotFound"));
         return false;
       }
-      copyText(text, activationToken);
-      toast(message("postTextCopied"));
-      return true;
+      return copyText(text, activationToken, "postTextCopied");
     }
     function copyPostBlockCleanLink(root, shareButton, activationToken) {
       if (!isCopyOriginalLinkEnabled() || !isValidUserActivationToken(activationToken)) return false;
@@ -1993,9 +2000,7 @@
         toast(message("postLinkNotFound"));
         return false;
       }
-      copyText(cleanUrl, activationToken);
-      toast(message("cleanLinkCopied"));
-      return true;
+      return copyText(cleanUrl, activationToken, "cleanLinkCopied");
     }
     function getDownloadErrorText(error) {
       if (typeof error === "string") return error.toLowerCase();
@@ -3271,11 +3276,12 @@
       replaceCleanLinkMenuIcon(cleanItem);
       cleanItem.addEventListener("pointerdown", stopButtonEvent, true);
       cleanItem.addEventListener("mousedown", stopButtonEvent, true);
-      cleanItem.addEventListener("click", (event) => {
+      cleanItem.addEventListener("click", async (event) => {
         blockEvent(event);
         const activationToken = createUserActivationToken(event);
-        if (!isCopyOriginalLinkEnabled() || !pruneNativeShareContext() || state.pendingShareContext !== context || cleanItem.parentElement !== context.menuItemParent || !context.menuContainer?.contains?.(cleanItem) || !activationToken || !copyText(context.cleanUrl, activationToken)) return;
-        toast(message("cleanLinkCopied"));
+        if (!isCopyOriginalLinkEnabled() || !pruneNativeShareContext() || state.pendingShareContext !== context || cleanItem.parentElement !== context.menuItemParent || !context.menuContainer?.contains?.(cleanItem) || !activationToken) return;
+        if (!await copyText(context.cleanUrl, activationToken, "cleanLinkCopied")) return;
+        if (state.pendingShareContext !== context) return;
         closeNativeShareMenu(context, cleanItem);
       }, true);
       context.menuContainer = menuContainer;
@@ -4955,10 +4961,13 @@
       },
       async writeClipboard(text) {
         if (typeof environment.GM_setClipboard === "function") {
-          environment.GM_setClipboard(text);
+          await environment.GM_setClipboard(text);
           return true;
         }
-        await environment.navigator?.clipboard?.writeText(text);
+        if (typeof environment.navigator?.clipboard?.writeText !== "function") {
+          throw new Error("clipboard_unavailable");
+        }
+        await environment.navigator.clipboard.writeText(text);
         return true;
       },
       async installStyles(cssText) {

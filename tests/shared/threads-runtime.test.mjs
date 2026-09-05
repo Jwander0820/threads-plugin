@@ -2001,3 +2001,33 @@ test('Chrome capture ingestion requires the current route generation before writ
     await runtime.stop();
     assert.equal(runtime.ingestCapturedMedia(records, globalThis.location.href, currentGeneration), false);
 });
+
+test('clipboard feedback waits for completion and reports failures without a success toast', async (t) => {
+    const previousLocation = globalThis.location;
+    globalThis.location = { href: 'https://www.threads.com/@author/post/ABC' };
+    t.after(() => {
+        if (previousLocation === undefined) delete globalThis.location;
+        else globalThis.location = previousLocation;
+    });
+    for (const outcome of ['success', 'reject', 'throw', 'false', 'missing', 'route-change']) {
+        const notices = [];
+        const toastNode = { set textContent(value) { notices.push(value); }, classList: { add() {} } };
+        let settle;
+        const pending = new Promise((resolve, reject) => { settle = outcome === 'reject' ? reject : resolve; });
+        const platform = fakePlatform();
+        platform.writeClipboard = outcome === 'throw' ? () => { throw new Error('denied'); } : () => pending;
+        if (outcome === 'missing') delete platform.writeClipboard;
+        const runtime = await createThreadsRuntime({
+            platform, initialOptions: {}, message: key => key,
+            document: { body: {}, getElementById: () => toastNode },
+            window: { clearTimeout() {}, setTimeout() { return 1; } }
+        });
+        const token = runtime.testing.createUserActivationToken({ isTrusted: true, type: 'click' }, { isActive: true });
+        const result = runtime.testing.copyText('test', token, 'postTextCopied');
+        if (!['throw', 'missing'].includes(outcome)) assert.deepEqual(notices, [], outcome);
+        if (outcome === 'route-change') globalThis.location.href += '?page=2';
+        settle(outcome === 'false' ? false : undefined);
+        assert.equal(await result, outcome === 'success', outcome);
+        assert.deepEqual(notices, outcome === 'success' ? ['postTextCopied'] : outcome === 'route-change' ? [] : ['copyFailed'], outcome);
+    }
+});

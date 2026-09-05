@@ -128,3 +128,18 @@ test('userscript settings menu cleans up partial registration failures exactly o
 
     assert.deepEqual(unregistered, [42]);
 });
+
+test('userscript clipboard rejects unavailable APIs and propagates write failures', async () => {
+    await assert.rejects(createUserscriptPlatformAdapter({}).writeClipboard('text'), /clipboard_unavailable/);
+    await assert.rejects(createUserscriptPlatformAdapter({
+        GM_setClipboard: async () => { throw new Error('denied'); }
+    }).writeClipboard('text'), /denied/);
+    await assert.rejects(createUserscriptPlatformAdapter({
+        navigator: { clipboard: { writeText: async () => { throw new Error('denied'); } } }
+    }).writeClipboard('text'), /denied/);
+    let copied;
+    assert.equal(await createUserscriptPlatformAdapter({
+        navigator: { clipboard: { writeText: async text => { copied = text; } } }
+    }).writeClipboard('text'), true);
+    assert.equal(copied, 'text');
+});

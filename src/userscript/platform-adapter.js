@@ -31,10 +31,13 @@ export function createUserscriptPlatformAdapter(environment = globalThis) {
         },
         async writeClipboard(text) {
             if (typeof environment.GM_setClipboard === 'function') {
-                environment.GM_setClipboard(text);
+                await environment.GM_setClipboard(text);
                 return true;
             }
-            await environment.navigator?.clipboard?.writeText(text);
+            if (typeof environment.navigator?.clipboard?.writeText !== 'function') {
+                throw new Error('clipboard_unavailable');
+            }
+            await environment.navigator.clipboard.writeText(text);
             return true;
         },
         async installStyles(cssText) {

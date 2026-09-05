@@ -997,10 +997,18 @@ export async function createThreadsRuntime({
         return token.routeKey === getMediaRouteKey();
     }
 
-    function copyText(text, activationToken) {
-        if (!isValidUserActivationToken(activationToken)) return false;
+    async function copyText(text, activationToken, successMessage) {
+        if (stopped || !isValidUserActivationToken(activationToken)) return false;
 
-        Promise.resolve(platform.writeClipboard(text)).catch(() => { });
+        const canNotify = () => !stopped && isValidUserActivationToken(activationToken);
+        try {
+            if (await platform.writeClipboard(text) === false) throw new Error('clipboard_write_failed');
+        } catch {
+            if (canNotify()) toast(message('copyFailed'));
+            return false;
+        }
+        if (!canNotify()) return false;
+        if (successMessage) toast(message(successMessage));
         return true;
     }
 
@@ -1319,9 +1327,7 @@ export async function createThreadsRuntime({
             return false;
         }
 
-        copyText(text, activationToken);
-        toast(message('postTextCopied'));
-        return true;
+        return copyText(text, activationToken, 'postTextCopied');
     }
 
     function copyPostBlockCleanLink(root, shareButton, activationToken) {
@@ -1335,9 +1341,7 @@ export async function createThreadsRuntime({
             return false;
         }
 
-        copyText(cleanUrl, activationToken);
-        toast(message('cleanLinkCopied'));
-        return true;
+        return copyText(cleanUrl, activationToken, 'cleanLinkCopied');
     }
 
     function getDownloadErrorText(error) {
@@ -2976,7 +2980,7 @@ export async function createThreadsRuntime({
 
         cleanItem.addEventListener('pointerdown', stopButtonEvent, true);
         cleanItem.addEventListener('mousedown', stopButtonEvent, true);
-        cleanItem.addEventListener('click', (event) => {
+        cleanItem.addEventListener('click', async (event) => {
             blockEvent(event);
             const activationToken = createUserActivationToken(event);
             if (
@@ -2985,10 +2989,10 @@ export async function createThreadsRuntime({
                 state.pendingShareContext !== context ||
                 cleanItem.parentElement !== context.menuItemParent ||
                 !context.menuContainer?.contains?.(cleanItem) ||
-                !activationToken ||
-                !copyText(context.cleanUrl, activationToken)
+                !activationToken
             ) return;
-            toast(message('cleanLinkCopied'));
+            if (!await copyText(context.cleanUrl, activationToken, 'cleanLinkCopied')) return;
+            if (state.pendingShareContext !== context) return;
             closeNativeShareMenu(context, cleanItem);
         }, true);
 

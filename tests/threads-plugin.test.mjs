@@ -176,7 +176,7 @@ test('media URL validation rejects extension smuggling and unapproved hosts', ()
     );
 });
 
-test('synthetic events cannot invoke privileged clipboard access', (t) => {
+test('synthetic events cannot invoke privileged clipboard access', async (t) => {
     let clipboardWrites = 0;
     globalThis.GM_setClipboard = () => {
         clipboardWrites += 1;
@@ -191,7 +191,7 @@ test('synthetic events cannot invoke privileged clipboard access', (t) => {
         detail: 1
     }, { isActive: true });
     assert.equal(syntheticToken, null);
-    assert.equal(copyText('secret text', syntheticToken), false);
+    assert.equal(await copyText('secret text', syntheticToken), false);
     assert.equal(clipboardWrites, 0);
 
     const trustedKeyboardToken = createUserActivationToken({
@@ -200,7 +200,7 @@ test('synthetic events cannot invoke privileged clipboard access', (t) => {
         detail: 0
     }, { isActive: false });
     assert.notEqual(trustedKeyboardToken, null);
-    assert.equal(copyText('public post text', trustedKeyboardToken), true);
+    assert.equal(await copyText('public post text', trustedKeyboardToken), true);
     assert.equal(clipboardWrites, 1);
 });
 
