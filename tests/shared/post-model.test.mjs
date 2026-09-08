@@ -1,7 +1,25 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { collectStructuredMediaUrls, normalizePostIdentity, parsePostInfoFromUrl } from '../../src/shared/post-model.js';
+import { collectStructuredMediaUrls, mergeStructuredMediaRecords, normalizePostIdentity, parsePostInfoFromUrl } from '../../src/shared/post-model.js';
+
+test('carousel child codes retain parent ownership and all four videos before DOM playback', () => {
+    const carousel = ['image', 'video', 'video', 'video', 'video', 'image'].map((type, index) => ({
+        code: `CHILD_${index}`, image_versions2: { candidates: [{ url: `https://cdninstagram.com/${index}.jpg` }] },
+        ...(type === 'video' ? { video_versions: [{ url: `https://cdninstagram.com/${index}.mp4` }] } : {})
+    }));
+    const records = collectStructuredMediaUrls({ code: 'PARENT_1', carousel_media: carousel });
+    assert.deepEqual(records.map(x => x.type), ['image', 'video', 'video', 'video', 'video', 'image']);
+    assert.ok(records.every(x => x.postId === 'PARENT_1'));
+    assert.equal(records[3].previewUrl, 'https://cdninstagram.com/3.jpg');
+    const posters = records.map((x, index) => ({ type: 'image', url: `https://cdninstagram.com/${index}.jpg` }));
+    const front = records.map((x, index) => index > 2 ? posters[index] : x);
+    const back = records.map((x, index) => index < 3 ? posters[index] : x);
+    const merged = mergeStructuredMediaRecords(front, back);
+    assert.deepEqual(merged.map(x => x.type), records.map(x => x.type));
+    assert.deepEqual(mergeStructuredMediaRecords(merged, front).map(x => x.type), records.map(x => x.type));
+    assert.equal(mergeStructuredMediaRecords(merged, [{type:'image',url:'https://cdninstagram.com/unrelated.jpg'}]).length, 6);
+});
 
 test('post URL model extracts and sanitizes author and post identity', () => {
     assert.deepEqual(parsePostInfoFromUrl('https://www.threads.com/@author/post/POST_A?x=1'), {

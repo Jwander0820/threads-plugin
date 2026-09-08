@@ -7,7 +7,7 @@ import { showDisclosure } from './disclosure.js';
 import { createLatestLifecycleQueue } from './latest-lifecycle-queue.js';
 import { createChromePlatformAdapter } from './platform-adapter.js';
 import { buildMediaRouteKey } from '../shared/route-media-state.js';
-import { createChromeRuntimeMessage } from './runtime-i18n.js';
+import { createChromeRuntimeMessage, createChromeDisclosureMessage } from './runtime-i18n.js';
 
 const IS_NODE_RUNTIME = typeof process !== 'undefined' && process.release?.name === 'node';
 const CAPTURE_MARKER = 'threads-plugin-capture';
@@ -248,7 +248,7 @@ export async function bootstrapChromeContent(environment = globalThis, dependenc
                 disclosureVisible = true;
                 const removeDisclosure = renderDisclosure({
                     document: environment.document,
-                    getMessage: createChromeRuntimeMessage(environment.chrome, {
+                    getMessage: createChromeDisclosureMessage(environment.chrome, {
                         languagePreference: currentOptions.languagePreference,
                         documentLanguage: environment.document.documentElement?.lang || ''
                     }),

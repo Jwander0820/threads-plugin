@@ -44,6 +44,12 @@ export function getMediaUrlIdentityAliases(url) {
         const canonicalQuery = new URLSearchParams(stableParams).toString();
         const canonicalUrl = `${parsed.protocol}//${parsed.hostname.toLowerCase()}${parsed.pathname}`;
         aliases.push(`url:${canonicalUrl}${canonicalQuery ? `?${canonicalQuery}` : ''}`);
+        // Instagram serves the same numbered media asset through both its
+        // generic CDN and regional fbcdn hosts, with different rendition keys.
+        if (/(?:^|\.)(?:cdninstagram\.com|fbcdn\.net)$/.test(parsed.hostname) &&
+            /^\/v\/t\d+(?:\.\d+)*-\d+\/\d+_\d+_\d+_[a-z]+\.(?:jpg|jpeg|png|webp|heic|heif)$/i.test(parsed.pathname)) {
+            aliases.push(`instagram-asset:${parsed.pathname}`);
+        }
         return aliases;
     } catch {
         return [];

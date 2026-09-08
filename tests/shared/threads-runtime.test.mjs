@@ -27,7 +27,9 @@ function createThreadsActionFixture({
     actionBarWidth = 360,
     actionSlotSize = 40,
     actionSlotStep = 64,
-    includePostIdentity = true
+    includePostIdentity = true,
+    postId = 'POST_1',
+    verticalOffset = 0
 } = {}) {
     const toolClasses = new Set([
         'tm-target-download-button',
@@ -37,11 +39,11 @@ function createThreadsActionFixture({
     ]);
     const rect = (left, top, width, height) => ({
         left,
-        top,
+        top: top + verticalOffset,
         width,
         height,
         right: left + width,
-        bottom: top + height
+        bottom: top + verticalOffset + height
     });
     const selectorContainsClass = (selector, className) =>
         Boolean(className && selector?.includes?.(`.${className}`));
@@ -231,7 +233,7 @@ function createThreadsActionFixture({
 
     const postLink = {
         tagName: 'A',
-        href: 'https://www.threads.com/@author/post/POST_1',
+        href: `https://www.threads.com/@author/post/${postId}`,
         parentElement: root,
         matches(selector) { return isPostLinkSelector(selector); },
         closest(selector) { return closestFrom(this, selector); },
@@ -321,6 +323,84 @@ function createThreadsActionFixture({
         window
     };
 }
+
+test('reply permalink keeps tools on the offscreen reply instead of its visible parent', async (t) => {
+    const previousLocation = globalThis.location;
+    globalThis.location = { href: 'https://www.threads.com/@author/post/REPLY_1' };
+    t.after(() => {
+        if (previousLocation === undefined) delete globalThis.location;
+        else globalThis.location = previousLocation;
+    });
+    const parent = createThreadsActionFixture({ postId: 'PARENT_1' });
+    const reply = createThreadsActionFixture({ postId: 'REPLY_1', verticalOffset: 1400 });
+    const parentQuery = parent.document.querySelectorAll.bind(parent.document);
+    const replyQuery = reply.document.querySelectorAll.bind(reply.document);
+    parent.document.querySelectorAll = (selector) => [...parentQuery(selector), ...replyQuery(selector)];
+    parent.document.body.querySelectorAll = parent.document.querySelectorAll;
+    reply.root.parentElement = parent.document.body;
+    const runtime = await createThreadsRuntime({
+        platform: fakePlatform(), document: parent.document, window: parent.window, initialOptions: {}
+    });
+    for (let pass = 0; pass < 3; pass += 1) {
+        runtime.testing.ensureCopyButtonsForBlocks();
+        runtime.testing.ensureDetailButton();
+        assert.deepEqual(parent.tools().map((tool) => tool.className), [
+            'tm-post-link-tool-button', 'tm-post-copy-tool-button'
+        ]);
+        assert.deepEqual(reply.tools().map((tool) => tool.className), [
+            'tm-post-link-tool-button', 'tm-post-copy-tool-button', 'tm-post-media-tool-button'
+        ]);
+    }
+});
+
+test('offscreen carousel posters match structured video slots without extra photos', async () => {
+    const runtime = await createThreadsRuntime({ platform: fakePlatform() });
+    const types = ['image', 'video', 'video', 'video', 'video', 'image'];
+    const structuredItems = types.map((type, index) => ({ type,
+        resolvedUrl: `https://cdninstagram.com/${index}.${type === 'video' ? 'mp4' : 'jpg'}`,
+        previewUrl: `https://cdninstagram.com/${index}.jpg`
+    }));
+    for (const visible of [[1, 2], [3, 4], []]) {
+        const rawItems = structuredItems.map((item, index) => visible.includes(index) ? item : ({
+            type: 'image', resolvedUrl: item.previewUrl, previewUrl: item.previewUrl
+        }));
+        const items = runtime.testing.finalizeModalItems({rawItems, structuredItems, cachedImageItems:[], cachedVideoItems:[]});
+        assert.deepEqual(items.map(x => x.type), types);
+        assert.deepEqual(items.map(x => x.resolvedUrl), structuredItems.map(x => x.resolvedUrl));
+    }
+});
+
+test('IG embedded MP4 remains batch media above the viewport and replaces its structured poster', async () => {
+    const runtime = await createThreadsRuntime({ platform: fakePlatform() });
+    const video = { tagName: 'VIDEO', getBoundingClientRect: () => ({
+        left: 101, top: -350, right: 343, bottom: 80, width: 242, height: 430
+    }) };
+    assert.equal(runtime.testing.isDetailMediaElement(video), true);
+    assert.equal(runtime.testing.isDetailMediaElement({ ...video,
+        getBoundingClientRect: () => ({width:0,height:0}) }), false);
+    const poster = 'https://cdninstagram.com/ig-poster.jpg';
+    const posterElement = { tagName: 'IMG', getBoundingClientRect: video.getBoundingClientRect };
+    assert.deepEqual(runtime.testing.selectDetailMediaElements([posterElement], [video], []), [video]);
+    assert.deepEqual(runtime.testing.selectDetailMediaElements([posterElement], [video], [posterElement, video]), [video]);
+    const mp4 = 'https://instagram.ftpe8-2.fna.fbcdn.net/o1/v/t2/f2/m86/ig.mp4';
+    const result = runtime.testing.finalizeModalItems({
+        rawItems: [{type:'video', element:video, resolvedUrl:mp4, previewUrl:poster}],
+        structuredItems: [{type:'image', resolvedUrl:poster, previewUrl:poster}],
+        cachedImageItems: [], cachedVideoItems: []
+    });
+    assert.equal(result.length, 1);
+    assert.equal(result[0].type, 'video');
+    assert.equal(result[0].resolvedUrl, mp4);
+    const assetPath = '/v/t51.82787-15/798488607_17965197453180290_7424278811206328192_n.jpg';
+    const livePoster = `https://instagram.ftpe8-2.fna.fbcdn.net${assetPath}?stp=dst-jpg_e15_tt6&ig_cache_key=OTHER`;
+    const liveCover = `https://scontent.cdninstagram.com${assetPath}?stp=dst-jpg_e35_tt6&dl=1`;
+    const liveResult = runtime.testing.finalizeModalItems({
+        rawItems: [{type:'video', element:video, resolvedUrl:mp4, previewUrl:livePoster}],
+        structuredItems: [{type:'image', resolvedUrl:liveCover, previewUrl:liveCover}],
+        cachedImageItems: [], cachedVideoItems: []
+    });
+    assert.deepEqual(liveResult.map(item => [item.type, item.resolvedUrl]), [['video', mp4]]);
+});
 
 test('post text cleaner removes only a trailing standalone English Translate label', async () => {
     const runtime = await createThreadsRuntime({ platform: fakePlatform() });

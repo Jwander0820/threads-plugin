@@ -20,6 +20,7 @@ import { createMessageFormatter } from './i18n.js';
 import { SHARED_UI_MESSAGES } from './i18n-messages.js';
 import {
     collectStructuredMediaUrls,
+    mergeStructuredMediaRecords,
     normalizePostIdentity,
     parsePostInfoFromUrl,
     sanitizeFilenamePart
@@ -2383,6 +2384,9 @@ export async function createThreadsRuntime({
         const rect = node.getBoundingClientRect();
         if (rect.width < 260 || rect.height < 140) return Number.NEGATIVE_INFINITY;
         if (node === document.body || node === document.documentElement) return Number.NEGATIVE_INFINITY;
+        // A thread container can include the parent and the addressed reply.
+        // It must never compete with an individual post for detail ownership.
+        if (countShareIconsInNode(node) > 1) return Number.NEGATIVE_INFINITY;
 
         const mediaCount = node.querySelectorAll?.('img, video')?.length || 0;
         if (mediaCount === 0) return Number.NEGATIVE_INFINITY;
@@ -2436,6 +2440,8 @@ export async function createThreadsRuntime({
 
         const articleCandidates = Array.from(document.querySelectorAll('article,[role="article"]'))
             .filter((node) => {
+                const ids = getPostIdsInNode(node);
+                if (ids.size && (ids.size !== 1 || !ids.has(getCurrentDetailPostInfo()?.postId))) return false;
                 const rect = node.getBoundingClientRect();
                 return rect.width > 260 && rect.height > 140 && rect.bottom > 0 && rect.top < window.innerHeight;
             })
@@ -2447,7 +2453,9 @@ export async function createThreadsRuntime({
             .filter(isDownloadableHoverMedia)
             .sort((a, b) => getVisibleRectScore(a) - getVisibleRectScore(b))[0];
 
-        return media ? findPostRoot(media) : null;
+        const mediaRoot = media ? findPostRoot(media) : null;
+        const ids = mediaRoot ? getPostIdsInNode(mediaRoot) : new Set();
+        return ids.size && (ids.size !== 1 || !ids.has(getCurrentDetailPostInfo()?.postId)) ? null : mediaRoot;
     }
 
     function findDetailActionBar(root) {
@@ -3135,7 +3143,6 @@ export async function createThreadsRuntime({
                     if (!slot || !rect || rect.width < 18 || rect.height < 18) return;
                     if (seenSlots.has(slot)) return;
                     seenSlots.add(slot);
-                    if (rect.bottom < 0 || rect.top > window.innerHeight) return;
 
                     const blockRoot = findPostBlockRootFromShareButton(slot);
                     const blockInfo = blockRoot
@@ -3145,6 +3152,9 @@ export async function createThreadsRuntime({
                         detailPostInfo?.postId &&
                         blockInfo?.postId === detailPostInfo.postId
                     );
+                    // Replies may start below the viewport. Keep their own action
+                    // row instead of substituting the visible parent's controls.
+                    if (blockInfo?.postId && !matchesDetailPost) return;
                     let score = detailShareCandidateScore(root, { slot }, rootPriority);
                     score += matchesDetailPost ? -50000 : 50000;
                     candidates.push({ svg, slot, rect, score });
@@ -3484,8 +3494,9 @@ export async function createThreadsRuntime({
             return cached;
         }
 
-        const root = findDetailPostRoot();
-        const shareButton = findDetailShareButton(root);
+        const candidateRoot = findDetailPostRoot();
+        const shareButton = findDetailShareButton(candidateRoot);
+        const root = (shareButton && findPostBlockRootFromShareButton(shareButton)) || candidateRoot;
         const actionBar = shareButton?.parentElement ||
             findDetailActionBar(root) ||
             ensureDetailFallbackBar(root);
@@ -3617,6 +3628,15 @@ export async function createThreadsRuntime({
             exactMatches.set(structuredSlotIndex, exactMatch);
         });
 
+        orderedStructuredItems.forEach((structuredItem, index) => {
+            if (exactMatches.has(index) || structuredItem.type !== 'video') return;
+            const poster = availableItems.find(item => !usedItems.has(item) && item.type === 'image' &&
+                areMediaUrlsEquivalent(item.resolvedUrl, structuredItem.previewUrl));
+            if (!poster) return;
+            usedItems.add(poster);
+            exactMatches.set(index, poster);
+        });
+
         const orderedItems = orderedStructuredItems.map((structuredItem, structuredSlotIndex) => {
             const exactMatch = exactMatches.get(structuredSlotIndex);
             if (!exactMatch) return { ...structuredItem, structuredSlotIndex };
@@ -3636,6 +3656,15 @@ export async function createThreadsRuntime({
     }
 
     function finalizeModalItems({ rawItems, cachedImageItems, cachedVideoItems, structuredItems = [] }) {
+        // An IG embed can expose only its poster in structured data while the
+        // native player already has the MP4. Prefer that confirmed association.
+        structuredItems = structuredItems.map(item => {
+            if (item.type !== 'image') return item;
+            const video = rawItems.find(candidate => candidate.type === 'video' &&
+                validateMediaUrl(candidate.resolvedUrl, 'video').ok &&
+                areMediaUrlsEquivalent(candidate.previewUrl, item.resolvedUrl));
+            return video ? { ...item, ...video } : item;
+        });
         const fallbackItems = [
             ...rawItems,
             ...cachedImageItems,
@@ -3707,6 +3736,23 @@ export async function createThreadsRuntime({
             });
     }
 
+    function isDetailMediaElement(element) {
+        if (element?.tagName !== 'VIDEO') return isDownloadableHoverMedia(element);
+        const rect = element.getBoundingClientRect();
+        // Ownership is checked by the caller; batch discovery must not apply
+        // viewport or top-left hover-button heuristics to native IG players.
+        return rect.width >= MIN_MEDIA_SIZE && rect.height >= MIN_MEDIA_SIZE;
+    }
+
+    function selectDetailMediaElements(images, videos, pageMedia) {
+        const allVideos = uniqueElements([...videos, ...pageMedia.filter(element => element.tagName === 'VIDEO')]);
+        // The page-band scan may omit an embedded player. Never discard the
+        // owned player together with its overlapping poster.
+        return orderMediaElementsByVisualPosition(uniqueElements([...images, ...allVideos, ...pageMedia])
+            .filter(element => element.tagName !== 'IMG' ||
+                !allVideos.some(video => rectsOverlap(element.getBoundingClientRect(), video.getBoundingClientRect()))));
+    }
+
     function collectVisibleDetailPageMedia(root, postId) {
         if (!root) return [];
 
@@ -3718,7 +3764,7 @@ export async function createThreadsRuntime({
             ? Math.min(rootRect.bottom + 16, actionRect.top + 8)
             : rootRect.bottom + 16;
         return Array.from(root.querySelectorAll('img, video'))
-            .filter(isDownloadableHoverMedia)
+            .filter(isDetailMediaElement)
             .filter((element) => isMediaOwnedByPost(element, root, postId))
             .filter((element) => {
                 const rect = element.getBoundingClientRect();
@@ -3751,27 +3797,11 @@ export async function createThreadsRuntime({
         const images = collectDetailPostImages(root, postId)
             .filter(isInMainRootBand);
         const videos = Array.from(root.querySelectorAll('video'))
-            .filter(isDownloadableHoverMedia)
+            .filter(isDetailMediaElement)
             .filter((video) => isMediaOwnedByPost(video, root, postId))
             .filter(isInMainRootBand);
-        const standaloneVideos = videos.filter((video) => {
-            const videoRect = video.getBoundingClientRect();
-            return !images.some((img) => rectsOverlap(img.getBoundingClientRect(), videoRect));
-        });
         const pageMedia = collectVisibleDetailPageMedia(root, postId);
-        const visibleVideoElements = uniqueElements([
-            ...videos,
-            ...pageMedia.filter((element) => element.tagName === 'VIDEO')
-        ]);
-        const media = orderMediaElementsByVisualPosition(
-            uniqueElements([...images, ...standaloneVideos, ...pageMedia])
-                .filter((element) => {
-                    if (element.tagName !== 'IMG') return true;
-
-                    const imageRect = element.getBoundingClientRect();
-                    return !visibleVideoElements.some((video) => rectsOverlap(imageRect, video.getBoundingClientRect()));
-                })
-        );
+        const media = selectDetailMediaElements(images, videos, pageMedia);
 
         const rawItems = media.map((element, index) => {
             const isVideo = element.tagName === 'VIDEO' || isVideoTargetElement(element);
@@ -3799,16 +3829,16 @@ export async function createThreadsRuntime({
             };
         });
 
-        const videoPreviewKeys = new Set(
+        const videoPreviews = (
             rawItems
                 .filter((item) => item.type === 'video')
-                .map((item) => getMediaUrlIdentity(item.previewUrl))
+                .map((item) => item.previewUrl)
                 .filter(Boolean)
         );
         const cachedImageItems = (postId ? (state.imageUrlsByPostId.get(postId) || []) : [])
             .slice()
             .reverse()
-            .filter((url) => !videoPreviewKeys.has(getMediaUrlIdentity(url)))
+            .filter((url) => !videoPreviews.some(preview => areMediaUrlsEquivalent(preview, url)))
             .map((url, index) => ({
                 type: 'image',
                 element: root,
@@ -3834,7 +3864,7 @@ export async function createThreadsRuntime({
             .map((item, index) => ({
                 type: item.type,
                 element: root,
-                previewUrl: item.type === 'image' ? item.url : '',
+                previewUrl: item.type === 'image' ? item.url : (item.previewUrl || ''),
                 resolvedUrl: item.url,
                 postInfo,
                 indexHint: index
@@ -4400,18 +4430,18 @@ export async function createThreadsRuntime({
             const postId = normalizePostIdentity(record.postId);
             if (!postId) return;
             if (!itemsByPostId.has(postId)) itemsByPostId.set(postId, []);
-            itemsByPostId.get(postId).push({ type: record.type, url: record.url });
+            itemsByPostId.get(postId).push({ type: record.type, url: record.url,
+                ...(record.previewUrl && validateMediaUrl(record.previewUrl, 'image').ok
+                    ? { previewUrl: record.previewUrl } : {}) });
             pendingRecordCount += 1;
             return false;
         });
 
         itemsByPostId.forEach((nextItems, postId) => {
             const currentItems = state.structuredMediaItemsByPostId.get(postId) || [];
-            if (nextItems.length >= currentItems.length) {
-                state.structuredMediaItemsByPostId.delete(postId);
-                state.structuredMediaItemsByPostId.set(postId, nextItems);
-                trimMapToSize(state.structuredMediaItemsByPostId, 160);
-            }
+            state.structuredMediaItemsByPostId.delete(postId);
+            state.structuredMediaItemsByPostId.set(postId, mergeStructuredMediaRecords(currentItems, nextItems));
+            trimMapToSize(state.structuredMediaItemsByPostId, 160);
         });
         let overflow = Array.from(state.structuredMediaItemsByPostId.values())
             .reduce((total, items) => total + items.length, 0) - MAX_STRUCTURED_RECORDS_PER_ROUTE;
@@ -4760,6 +4790,8 @@ export async function createThreadsRuntime({
             cleanPostTextFragment,
             closeNativeShareMenu,
             collectStructuredMediaUrls,
+            collectDetailPostMediaItems,
+            findDetailPostRoot,
             copyText,
             copyPostBlockCleanLink,
             createUserActivationToken,
@@ -4816,6 +4848,8 @@ export async function createThreadsRuntime({
             isInspectableResponseMime,
             isInsideNestedPostBlock,
             isMediaOwnedByPost,
+            isDetailMediaElement,
+            selectDetailMediaElements,
             isNativeCopyLinkActionRect,
             isSecurityDownloadError,
             isShareSvg,

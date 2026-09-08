@@ -1,5 +1,5 @@
 import { validateMediaUrl } from './media-policy.js';
-import { getMediaUrlIdentity } from './route-media-state.js';
+import { getMediaUrlIdentity, areMediaUrlsEquivalent } from './route-media-state.js';
 
 export function sanitizeFilenamePart(value) {
     const cleaned = String(value || 'unknown')
@@ -88,7 +88,7 @@ export function collectStructuredMediaUrls(value, inheritedPostCode = null) {
     const recordKeys = new Set();
     const visited = new WeakSet();
 
-    const addRecord = (type, rawUrl, postId, preserveDuplicateSlot = false) => {
+    const addRecord = (type, rawUrl, postId, preserveDuplicateSlot = false, previewUrl = null) => {
         if (!postId) return;
         const validated = validateMediaUrl(rawUrl, type);
         if (!validated.ok) return;
@@ -96,7 +96,7 @@ export function collectStructuredMediaUrls(value, inheritedPostCode = null) {
         const key = `${postId}:${type}:${identity || validated.url}`;
         if (!preserveDuplicateSlot && recordKeys.has(key)) return;
         recordKeys.add(key);
-        records.push({ type, url: validated.url, postId });
+        records.push({ type, url: validated.url, postId, ...(previewUrl ? { previewUrl } : {}) });
     };
 
     const visit = (node, postCode, depth, preserveDuplicateSlots = false) => {
@@ -108,7 +108,7 @@ export function collectStructuredMediaUrls(value, inheritedPostCode = null) {
         if (typeof node !== 'object' || visited.has(node)) return;
         visited.add(node);
 
-        const nextPostCode = getPostCodeFromObject(node) || postCode;
+        const nextPostCode = (preserveDuplicateSlots && postCode) || getPostCodeFromObject(node) || postCode;
         const hasCarouselMedia = Array.isArray(node.carousel_media) && node.carousel_media.length > 0;
         // Threads also exposes the first carousel item as a post-level cover.
         // carousel_media is authoritative, so recording the wrapper would
@@ -119,10 +119,10 @@ export function collectStructuredMediaUrls(value, inheritedPostCode = null) {
                 .map((key) => validateMediaUrl(node[key], 'video'))
                 .find((result) => result.ok)?.url || null;
             const videoUrl = renditionVideoUrl || directVideoUrl;
-            if (videoUrl) addRecord('video', videoUrl, nextPostCode, preserveDuplicateSlots);
-
             const imageCandidates = node.image_versions2?.candidates || node.image_versions?.candidates;
-            const imageUrl = pickBestStructuredMediaUrl(imageCandidates, 'image');
+            const imageUrl = pickBestStructuredMediaUrl(imageCandidates, 'image') ||
+                pickBestStructuredMediaUrl(['display_url', 'image_url', 'thumbnail_src', 'thumbnail_url'].map(key => node[key]), 'image');
+            if (videoUrl) addRecord('video', videoUrl, nextPostCode, preserveDuplicateSlots, imageUrl);
             if (!videoUrl && imageUrl) addRecord('image', imageUrl, nextPostCode, preserveDuplicateSlots);
             if (!videoUrl && !imageUrl) {
                 ['display_url', 'image_url', 'thumbnail_src', 'thumbnail_url'].forEach((key) => {
@@ -147,4 +147,20 @@ export function collectStructuredMediaUrls(value, inheritedPostCode = null) {
 
     visit(value, inheritedPostCode, 0);
     return records;
+}
+
+// Partial carousel responses can replace an offscreen video with its poster.
+// Match by media identity, never by the currently mounted DOM's video index.
+export function mergeStructuredMediaRecords(current, incoming) {
+    const base = incoming.length >= current.length ? incoming : current;
+    const videos = [...incoming, ...current].filter(item => item.type === 'video');
+    return base.map(item => {
+        if (item.type === 'video') {
+            const known = videos.find(candidate => candidate.previewUrl && areMediaUrlsEquivalent(candidate.url, item.url));
+            return item.previewUrl || !known ? item : { ...item, previewUrl: known.previewUrl };
+        }
+        const video = videos.find(candidate => candidate.previewUrl &&
+            areMediaUrlsEquivalent(candidate.previewUrl, item.url));
+        return video || item;
+    });
 }

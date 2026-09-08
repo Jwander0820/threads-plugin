@@ -2,7 +2,7 @@
 
 ## Scope and source-of-truth rule
 
-Threads Plugin 5.2.0 is built from one repository into two installable products:
+Threads Plugin 5.2.1 is built from one repository into two installable products:
 
 - the root `threads-plugin.user.js` for Tampermonkey;
 - the Manifest V3 extension under `dist/chrome-extension`, then the deterministic production ZIP under `artifacts`.
@@ -73,6 +73,8 @@ Hook installation is transactional: fetch, XHR, history, and navigation hooks ei
 MAIN invalidates its active generation synchronously when history/navigation changes and requests a new token through `READY`. Because a request retains the generation present at classification, an A→B→A transition cannot make a response from the first A current again. The content-issued token also keeps MAIN and ISOLATED aligned when capture is injected into an already-running page.
 
 The MAIN script posts only sanitized media records and protocol metadata to the same window. Raw GraphQL response bodies never cross the bridge.
+
+Video records may also carry an image-policy-validated `previewUrl`. Carousel children retain the containing post identity, and the runtime uses poster associations to reconcile offscreen thumbnails with video slots. Partial responses cannot downgrade an already resolved video to its poster image; these associations remain within the existing bounded route-scoped media cache.
 
 ### Extension service worker
 

@@ -2,6 +2,23 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { showDisclosure } from '../../src/chrome/disclosure.js';
+import { createChromeDisclosureMessage } from '../../src/chrome/runtime-i18n.js';
+
+test('real disclosure catalogs render every label in automatic and manual locales', () => {
+    for (const [documentLanguage, languagePreference, expected] of [
+        ['zh-TW', 'auto', '先決定是否允許頁面內容處理'],
+        ['en', 'auto', 'Choose Whether to Allow Page Content Processing'],
+        ['ja', 'auto', 'Choose Whether to Allow Page Content Processing'],
+        ['en', 'zh-TW', '先決定是否允許頁面內容處理'],
+        ['zh-TW', 'en', 'Choose Whether to Allow Page Content Processing']
+    ]) {
+        const fixture = createFixture();
+        showDisclosure({ document: fixture.document, onAccept() {}, onDecline() {},
+            getMessage: createChromeDisclosureMessage({}, {documentLanguage, languagePreference}) });
+        assert.ok(fixture.root.innerHTML.includes(expected));
+        assert.doesNotMatch(fixture.root.innerHTML, /\[missing:|undefined/);
+    }
+});
 
 function createFixture() {
     const listeners = new Map();

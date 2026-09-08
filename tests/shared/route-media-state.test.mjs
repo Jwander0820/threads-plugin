@@ -8,6 +8,16 @@ import {
     transitionMediaRouteScope
 } from '../../src/shared/route-media-state.js';
 
+test('Instagram numbered assets match across the actual turtle poster CDN variants', () => {
+    const path = '/v/t51.82787-15/798488607_17965197453180290_7424278811206328192_n.jpg';
+    const cover = `https://scontent.cdninstagram.com${path}?stp=dst-jpg_e35_tt6&dl=1`;
+    const poster = `https://instagram.ftpe8-2.fna.fbcdn.net${path}?stp=dst-jpg_e15_tt6&ig_cache_key=OTHER`;
+    assert.equal(areMediaUrlsEquivalent(cover, poster), true);
+    assert.equal(areMediaUrlsEquivalent(cover, poster.replace('798488607_', '798488608_')), false);
+    assert.equal(areMediaUrlsEquivalent(cover, poster.replace('instagram.ftpe8-2.fna.fbcdn.net', 'attacker.example')), false);
+    assert.equal(areMediaUrlsEquivalent('https://scontent.cdninstagram.com/photo.jpg', 'https://instagram.ftpe8-2.fna.fbcdn.net/photo.jpg'), false);
+});
+
 test('route identity ignores tracking but preserves semantic query parameters', () => {
     assert.equal(
         buildMediaRouteKey('https://www.threads.com/search?utm_source=x&q=alpha'),

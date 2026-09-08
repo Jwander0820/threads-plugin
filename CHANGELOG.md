@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [5.2.1] - 2026-09-08
+
+### Fixed
+
+- Match numbered Instagram poster assets across generic and regional CDN hosts, so IG video covers with different rendition/cache parameters merge into the confirmed video instead of remaining as extra photos.
+
+- Keep post-owned IG embedded players in batch discovery outside the viewport and replace structured poster entries with confirmed MP4 media.
+
+- Render the Chrome page-consent disclosure from the packaged extension catalogs, respecting automatic/manual language selection instead of displaying missing keys from the shared media-tool catalog.
+
+- Preserve carousel video ownership and validated poster associations so offscreen video thumbnails keep their video type, URL and slot when reopening the media picker or receiving partial carousel data.
+- Keep detail tools on the addressed reply when its action row is below the viewport, instead of moving copy/link controls and the media picker onto the visible parent post.
+
+- Wait for clipboard writes to finish before showing success for post text and clean links in both the Chrome Extension and Tampermonkey userscript.
+- Show a localized retry message when clipboard access fails or is unavailable, and suppress stale feedback after navigation or runtime shutdown.
+- Keep the native share menu open when copying its clean-link action fails so the user can retry.
+
 ## [5.2.0] - 2026-08-24
 
 ### Added

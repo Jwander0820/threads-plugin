@@ -44,13 +44,17 @@ function isThreadsRouteKey(value) {
 }
 
 function normalizeRecord(record) {
-    if (!sameExactKeys(record, RECORD_KEYS)) return null;
+    if (!sameExactKeys(record, RECORD_KEYS) &&
+        !sameExactKeys(record, ['postId', 'previewUrl', 'type', 'url'])) return null;
     if (record.type !== 'image' && record.type !== 'video') return null;
     const postId = normalizePostIdentity(record.postId);
     if (!postId) return null;
     const media = validateMediaUrl(record.url, record.type);
     if (!media.ok) return null;
-    return Object.freeze({ type: record.type, url: media.url, postId });
+    if (record.previewUrl !== undefined &&
+        (record.type !== 'video' || !validateMediaUrl(record.previewUrl, 'image').ok)) return null;
+    return Object.freeze({ type: record.type, url: media.url, postId,
+        ...(record.previewUrl !== undefined ? { previewUrl: record.previewUrl } : {}) });
 }
 
 function isRouteGeneration(value) {

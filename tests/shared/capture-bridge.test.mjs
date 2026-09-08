@@ -60,6 +60,14 @@ function bridgeState(options) {
     return createCaptureBridgeState(options);
 }
 
+test('bridge preserves validated video posters and rejects unsafe poster URLs', () => {
+    const record = {...validRecord, previewUrl:'https://cdninstagram.com/poster.jpg'};
+    const accepted = validateCaptureBridgeEvent(event(payload({records:[record]})), pageUrl, bridgeState(), source, routeGeneration);
+    assert.equal(accepted.ok, true);
+    assert.deepEqual(accepted.records, [record]);
+    assert.equal(payload({records:[{...record, previewUrl:'https://attacker.example/poster.jpg'}]}), null);
+});
+
 test('bridge accepts exact current-route records once', () => {
     const state = bridgeState();
     const accepted = validateCaptureBridgeEvent(event(), pageUrl, state, source, routeGeneration);
