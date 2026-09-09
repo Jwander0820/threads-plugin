@@ -899,6 +899,9 @@ test('the four page features can be enabled independently', async (t) => {
             fixtureCase.key
         );
         assert.equal(Boolean(hoverButton), fixtureCase.expectHoverButton, fixtureCase.key);
+        for (const tool of fixture.tools()) {
+            assert.equal(tool.getAttribute('data-tm-theme-aware'), '1', `${fixtureCase.key} theme isolation`);
+        }
         assert.equal(
             fixture.document.body.children.filter((node) => node.className === 'tm-target-download-button').length,
             fixtureCase.expectHoverButton ? 1 : 0,

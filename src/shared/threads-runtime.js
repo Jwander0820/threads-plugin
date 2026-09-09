@@ -300,7 +300,8 @@ export async function createThreadsRuntime({
             border: 0 !important;
             border-radius: 999px !important;
             padding: 0 !important;
-            color: rgb(228, 230, 235) !important;
+            /* Follow the page theme, including changes without a reload. */
+            color: inherit !important;
             background: transparent !important;
             display: inline-flex !important;
             align-items: center !important;
@@ -324,10 +325,18 @@ export async function createThreadsRuntime({
             vertical-align: middle !important;
         }
 
-        .${POST_TOOL_CLASS}:hover,
-        .${COPY_TOOL_CLASS}:hover,
-        .${LINK_TOOL_CLASS}:hover {
-            background: rgba(255, 255, 255, 0.08) !important;
+        /* Scope theme colors to updated controls so an older co-installed
+           build cannot override them with its single-class !important rule. */
+        .${POST_TOOL_CLASS}[data-tm-theme-aware="1"],
+        .${COPY_TOOL_CLASS}[data-tm-theme-aware="1"],
+        .${LINK_TOOL_CLASS}[data-tm-theme-aware="1"] {
+            color: var(--icon-primary, var(--text-primary, inherit)) !important;
+        }
+
+        .${POST_TOOL_CLASS}[data-tm-theme-aware="1"]:hover,
+        .${COPY_TOOL_CLASS}[data-tm-theme-aware="1"]:hover,
+        .${LINK_TOOL_CLASS}[data-tm-theme-aware="1"]:hover {
+            background: color-mix(in srgb, currentColor 8%, transparent) !important;
         }
 
         .tm-post-media-tool-fallback {
@@ -3292,6 +3301,7 @@ export async function createThreadsRuntime({
         const linkButton = document.createElement('button');
         linkButton.type = 'button';
         linkButton.className = LINK_TOOL_CLASS;
+        linkButton.setAttribute('data-tm-theme-aware', '1');
         linkButton.title = message('copyCleanLink');
         linkButton.setAttribute('aria-label', message('copyCleanLink'));
         linkButton.innerHTML = `
@@ -3319,6 +3329,7 @@ export async function createThreadsRuntime({
         const copyButton = document.createElement('button');
         copyButton.type = 'button';
         copyButton.className = COPY_TOOL_CLASS;
+        copyButton.setAttribute('data-tm-theme-aware', '1');
         copyButton.title = message('copyPostText');
         copyButton.setAttribute('aria-label', message('copyPostText'));
         copyButton.innerHTML = `
@@ -3526,6 +3537,7 @@ export async function createThreadsRuntime({
             const button = document.createElement('button');
             button.type = 'button';
             button.className = POST_TOOL_CLASS;
+            button.setAttribute('data-tm-theme-aware', '1');
             button.title = message('openMediaDownloader');
             button.setAttribute('aria-label', message('openMediaDownloader'));
             button.innerHTML = `

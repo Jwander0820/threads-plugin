@@ -2,7 +2,7 @@
 
 ## Scope and source-of-truth rule
 
-Threads Plugin 5.2.1 is built from one repository into two installable products:
+Threads Plugin 5.2.2 is built from one repository into two installable products:
 
 - the root `threads-plugin.user.js` for Tampermonkey;
 - the Manifest V3 extension under `dist/chrome-extension`, then the deterministic production ZIP under `artifacts`.

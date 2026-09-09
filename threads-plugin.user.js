@@ -3,7 +3,7 @@
 // @name:zh-TW   Threads Plugin
 // @name:en      Threads Plugin
 // @namespace    https://github.com/Jwander0820
-// @version      5.2.1
+// @version      5.2.2
 // @description  Download images and videos from Threads posts, select media in batches, copy post text, and copy links with tracking parameters removed.
 // @description:zh-TW 為 Threads 貼文提供圖片與影片下載、批次資源選擇、貼文文字複製，以及去除追蹤碼的連結複製功能。
 // @description:en Download images and videos from Threads posts, select media in batches, copy post text, and copy links with tracking parameters removed.
@@ -1198,7 +1198,8 @@
             border: 0 !important;
             border-radius: 999px !important;
             padding: 0 !important;
-            color: rgb(228, 230, 235) !important;
+            /* Follow the page theme, including changes without a reload. */
+            color: inherit !important;
             background: transparent !important;
             display: inline-flex !important;
             align-items: center !important;
@@ -1222,10 +1223,18 @@
             vertical-align: middle !important;
         }
 
-        .${POST_TOOL_CLASS}:hover,
-        .${COPY_TOOL_CLASS}:hover,
-        .${LINK_TOOL_CLASS}:hover {
-            background: rgba(255, 255, 255, 0.08) !important;
+        /* Scope theme colors to updated controls so an older co-installed
+           build cannot override them with its single-class !important rule. */
+        .${POST_TOOL_CLASS}[data-tm-theme-aware="1"],
+        .${COPY_TOOL_CLASS}[data-tm-theme-aware="1"],
+        .${LINK_TOOL_CLASS}[data-tm-theme-aware="1"] {
+            color: var(--icon-primary, var(--text-primary, inherit)) !important;
+        }
+
+        .${POST_TOOL_CLASS}[data-tm-theme-aware="1"]:hover,
+        .${COPY_TOOL_CLASS}[data-tm-theme-aware="1"]:hover,
+        .${LINK_TOOL_CLASS}[data-tm-theme-aware="1"]:hover {
+            background: color-mix(in srgb, currentColor 8%, transparent) !important;
         }
 
         .tm-post-media-tool-fallback {
@@ -3516,6 +3525,7 @@
       const linkButton = document.createElement("button");
       linkButton.type = "button";
       linkButton.className = LINK_TOOL_CLASS;
+      linkButton.setAttribute("data-tm-theme-aware", "1");
       linkButton.title = message("copyCleanLink");
       linkButton.setAttribute("aria-label", message("copyCleanLink"));
       linkButton.innerHTML = `
@@ -3541,6 +3551,7 @@
       const copyButton = document.createElement("button");
       copyButton.type = "button";
       copyButton.className = COPY_TOOL_CLASS;
+      copyButton.setAttribute("data-tm-theme-aware", "1");
       copyButton.title = message("copyPostText");
       copyButton.setAttribute("aria-label", message("copyPostText"));
       copyButton.innerHTML = `
@@ -3705,6 +3716,7 @@
         const button = document.createElement("button");
         button.type = "button";
         button.className = POST_TOOL_CLASS;
+        button.setAttribute("data-tm-theme-aware", "1");
         button.title = message("openMediaDownloader");
         button.setAttribute("aria-label", message("openMediaDownloader"));
         button.innerHTML = `
@@ -5095,7 +5107,7 @@
   }
   if (!IS_NODE_RUNTIME) {
     bootstrapUserscript().then(() => {
-      console.log("[Threads Target Downloader]", "v5.2.1 loaded");
+      console.log("[Threads Target Downloader]", "v5.2.2 loaded");
     }).catch((error) => {
       console.error("[Threads Target Downloader]", "bootstrap failed", error);
     });

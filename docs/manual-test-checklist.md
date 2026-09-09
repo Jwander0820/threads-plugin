@@ -1,5 +1,22 @@
 # Manual browser test checklist
 
+## Theme regression fixture
+
+Run `npm.cmd run build` and `node scripts/serve-theme-check.mjs`, then open
+`http://127.0.0.1:4174/?target=userscript` and `http://127.0.0.1:4174/?target=extension`.
+Each page uses the selected build's actual CSS and SVG markup, with a deliberately
+light parent text color and a conflicting legacy stylesheet. Expect `pass: true`
+before and after pressing **Switch theme**. Repeat with `&reverse=1` to check both
+stylesheet orders. Hover each control and confirm the background follows the icon
+color. This fixture does not replace testing the installed products on Threads.
+
+For installed-product verification, confirm version 5.2.2, reload Threads, and
+check download, copy-text and copy-link controls while switching the site's theme.
+When intentionally comparing an older and newer product together, only updated
+controls have the theme-isolation marker; old controls may retain their old color.
+
+## Historical release evidence
+
 > The completed checks and sign-off below are historical 5.1.0 evidence. They do not approve 5.2.0. The owner has only reported an initial 5.2.0 pass for language selection and the four feature toggles; all exact-ZIP and full regression items must be rerun before release.
 
 Automated local Chrome fixture validation completed on 2026-08-12 with Chrome 151.0.7922.108. The 2026-08-13 automated checkpoint passed 146 Node tests plus the userscript, extension, documentation, generated-output, packaging, and dependency-audit gates. These results describe the checkpoint implementation; final visual assets and the exact release ZIP must be regenerated and signed off before submission:

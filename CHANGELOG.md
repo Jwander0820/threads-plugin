@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [5.2.2] - 2026-09-09
+
+### Fixed
+
+- Follow Threads light/dark theme colors for post download, copy-text and copy-link icons and their hover backgrounds in both products.
+- Protect updated icon colors from older co-installed builds' fixed light-color styles.
+
 ## [5.2.1] - 2026-09-08
 
 ### Fixed
