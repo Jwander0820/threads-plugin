@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Threads Plugin 剪貼簿驗證</title>
+    <style>
+      :root { color-scheme: light dark; font: 16px/1.6 system-ui, sans-serif; }
+      body { max-width: 800px; margin: 3rem auto; padding: 0 1.25rem; }
+      h1 { font-size: 1.5rem; }
+      label { display: block; font-weight: 600; margin-top: 1.5rem; }
+      textarea { box-sizing: border-box; width: 100%; min-height: 280px; padding: 0.75rem; font: inherit; }
+      button { padding: 0.45rem 1rem; font: inherit; cursor: pointer; }
+      .controls { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Threads Plugin 剪貼簿驗證</h1>
+    <p>先在 Threads 複製文字或連結，再點選下方欄位並按 Ctrl+V。請核對實際貼上的內容。</p>
+    <p>本頁不會主動讀取剪貼簿，也不會儲存或傳送貼上的內容。重新整理或關閉頁面即清除。</p>
+    <label for="clipboard-content">貼上測試內容</label>
+    <textarea id="clipboard-content" autocomplete="off" spellcheck="false" placeholder="在這裡按 Ctrl+V" aria-describedby="character-count"></textarea>
+    <div class="controls">
+      <output id="character-count" for="clipboard-content" aria-live="polite">字元數：0</output>
+      <button id="clear-content" type="button">清除</button>
+    </div>
+    <script>
+      const content = document.getElementById('clipboard-content');
+      const count = document.getElementById('character-count');
+      function updateCount() {
+        count.textContent = `字元數：${Array.from(content.value).length}`;
+      }
+      content.addEventListener('input', updateCount);
+      document.getElementById('clear-content').addEventListener('click', () => {
+        content.value = '';
+        updateCount();
+        content.focus();
+      });
+      window.addEventListener('pageshow', () => {
+        content.value = '';
+        updateCount();
+      });
+    </script>
+  </body>
+</html>

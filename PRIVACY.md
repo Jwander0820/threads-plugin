@@ -39,6 +39,8 @@ No other transfer is performed by the extension. Raw GraphQL response bodies rem
 
 `chrome.storage.local` stores only normalized feature, timing, and interface-language options, the last supported Threads document locale, and consent state. It does not store post text, media URLs, browsing history, cookies, credentials, analytics identifiers, or downloaded file content.
 
+During downloads, `chrome.storage.session` temporarily stores the download ID and its owning tab, document, Threads origin and creation time. This lets the extension check or cancel only its own downloads after a service-worker restart. This metadata contains no media URL, filename or file content, and is removed during download cleanup or when the browser session ends. Per-item batch results remain only in the current tab's memory and are cleared on route changes, batch-feature disablement or runtime shutdown.
+
 Parsed post text, links, and media records may remain in the current tab's memory while that tab's consented runtime is active. Route and post identity checks prevent stale records from being accepted for or used as a different route or post. In-memory records are cleared when consent is revoked, the runtime stops (including entry into a sensitive route), or the tab closes; they are never persisted by the extension. Copies and downloads have the separate retention described above.
 
 ## User control

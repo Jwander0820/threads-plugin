@@ -4,6 +4,25 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [5.3.0] - 2026-09-20
+
+### Added
+
+- Show individual batch-download results and let users retry only failed or unresolved items while retaining successful results.
+- Add installed-extension Chromium regression tests for mixed media, reply-detail ownership, SPA navigation, language/theme changes and consent revocation.
+- Cover all 16 feature-switch combinations, empty media and repeated dialog interactions; retain a JSON test report and repeatable live-browser checks.
+
+### Changed
+
+- Extract post text, media resolution, download task sequencing and the media dialog into shared modules used by both products.
+- Track Chrome download completion and interruption through document-owned download IDs; keep temporary ownership metadata in session storage so service-worker suspension does not lose ownership.
+- Distinguish verified download completion from Tampermonkey's blob fallback being handed to the browser.
+
+### Fixed
+
+- Preserve individual failures in batch results and cancel stale batch work after route changes, feature disablement or runtime shutdown.
+- Render the media-not-found count in English and Traditional Chinese batch summaries on both platforms instead of exposing an unresolved placeholder.
+
 ## [5.2.2] - 2026-09-09
 
 ### Fixed

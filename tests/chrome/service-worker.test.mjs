@@ -36,12 +36,15 @@ function createPersistentState(consent) {
 }
 
 function createWorkerEnvironment(persistentState) {
+    persistentState.downloadSessions ||= {};
     const calls = [];
     const onMessage = createEvent();
     const onInstalled = createEvent();
     const onStartup = createEvent();
     const onChanged = createEvent();
     const onClicked = createEvent();
+    const onTabRemoved = createEvent();
+    const onTabUpdated = createEvent();
     const extensionApi = {
         runtime: {
             id: 'extension-id',
@@ -53,6 +56,13 @@ function createWorkerEnvironment(persistentState) {
             }
         },
         storage: {
+            session: {
+                async get(key) { return key === null ? { ...persistentState.downloadSessions } : { [key]: persistentState.downloadSessions[key] }; },
+                async set(values) { Object.assign(persistentState.downloadSessions, values); },
+                async remove(key) {
+                    for (const entry of Array.isArray(key) ? key : [key]) delete persistentState.downloadSessions[entry];
+                }
+            },
             local: {
                 async get(key) {
                     assert.equal(key, CONSENT_STORAGE_KEY);
@@ -91,8 +101,12 @@ function createWorkerEnvironment(persistentState) {
             async download(details) {
                 calls.push(['download', details]);
                 return 73;
+            },
+            async cancel(id) {
+                calls.push(['cancel-download', id]);
             }
         },
+        tabs: { onRemoved: onTabRemoved, onUpdated: onTabUpdated },
         action: { onClicked }
     };
     return {
@@ -102,6 +116,8 @@ function createWorkerEnvironment(persistentState) {
         onMessage,
         onInstalled,
         onStartup,
+        onTabRemoved,
+        onTabUpdated,
         onClicked
     };
 }
@@ -225,6 +241,8 @@ test('bootstrap is idempotent within one worker and its reconcile queue recovers
     assert.equal(environment.onStartup.listeners.length, 1);
     assert.equal(environment.onChanged.listeners.length, 1);
     assert.equal(environment.onClicked.listeners.length, 1);
+    assert.equal(environment.onTabRemoved.listeners.length, 1);
+    assert.equal(environment.onTabUpdated.listeners.length, 1);
     await assert.rejects(worker.ready, /simulated registration read failure/);
 
     assert.deepEqual(
@@ -234,6 +252,23 @@ test('bootstrap is idempotent within one worker and its reconcile queue recovers
     assert.equal(isExpectedCaptureScript(persistentState.registered[0]), true);
     assert.equal(environment.calls.filter(([kind]) => kind === 'register').length, 1);
     assert.equal(environment.calls.filter(([kind]) => kind === 'execute').length, 1);
+});
+
+test('worker tab events clean up only downloads created for that tab', async () => {
+    for (const eventName of ['onTabRemoved', 'onTabUpdated']) {
+        const persistentState = createPersistentState(acceptPageDisclosure());
+        const environment = createWorkerEnvironment(persistentState);
+        await bootstrapServiceWorker(environment.extensionApi).ready;
+        await dispatchMessage(environment, {
+            type: 'DOWNLOAD_MEDIA', url: 'https://scontent.cdninstagram.com/photo.jpg',
+            filename: 'photo.jpg', expectedType: 'image'
+        });
+        persistentState.downloadSessions['threadsDownload:99'] = { tabId: 99, createdAt: Date.now() };
+        environment[eventName].fire(9, { status: 'loading' });
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.deepEqual(environment.calls.filter(([kind]) => kind === 'cancel-download'), [['cancel-download', 73]]);
+        assert.deepEqual(Object.keys(persistentState.downloadSessions), ['threadsDownload:99']);
+    }
 });
 
 test('consent revoked during enable reconciliation cannot inject stale MAIN capture', async () => {

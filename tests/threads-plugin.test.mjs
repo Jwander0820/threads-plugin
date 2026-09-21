@@ -1157,5 +1157,7 @@ test('batch download rejects a second click while the first batch is active', as
     assert.equal(downloadCalls, 1);
 
     releaseDownload(true);
-    assert.equal(await firstBatch, true);
+    const result = await firstBatch;
+    assert.equal(result.completed, true);
+    assert.equal(result.counts.success, 1);
 });

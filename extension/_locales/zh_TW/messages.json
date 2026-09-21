@@ -76,6 +76,7 @@
   "privacyRetentionHeading": { "message": "儲存與保留" },
   "privacyRetentionP1": { "message": "只保存正規化後的功能／時間／介面語言選項、最近一次有效的 Threads 文件語系與 consent state，不保存貼文文字、媒體 URL、瀏覽紀錄、Cookie、憑證、analytics 識別碼或下載內容。" },
   "privacyRetentionP2": { "message": "解析的文字、連結與媒體記錄可能在已同意 runtime 運作期間留在目前分頁記憶體；貼文與路由識別檢查避免舊記錄被當成另一貼文或路由使用。撤銷同意、runtime 停止（包含進入敏感路徑）或關閉分頁時會清除，且擴充功能不會持久化這些記錄。" },
+  "privacyDownloadSession": { "message": "下載期間，chrome.storage.session 暫存下載 ID、所屬分頁、文件、Threads 來源與建立時間，供 service worker 重啟後查詢或取消本工具建立的下載。這些記錄不包含媒體 URL、檔名或檔案內容，會在下載清理或瀏覽器工作階段結束時移除。批次結果只留在分頁記憶體，切換路由、停用批次功能或 runtime 停止時清除。" },
   "privacyRetentionP3": { "message": "你要求複製的文字或連結會寫入作業系統剪貼簿，依作業系統／剪貼簿管理器設定保留。下載 URL、檔名、Chrome 下載紀錄與下載檔案則依 Chrome 與作業系統設定保留。" },
   "privacyControlHeading": { "message": "控制與撤銷" },
   "privacyControlP1": { "message": "同意前擴充功能保持休眠；你可以拒絕而不被重複提示、稍後從設定頁啟用、獨立停用進階擷取，或撤銷全部同意。撤銷後，已開啟的 Threads 分頁會停止 runtime、移除加入的 UI、停止 MAIN wrapper、移除同頁 bridge listener、取消註冊未來的 MAIN capture，且重新同意前不再處理頁面。" },

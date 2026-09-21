@@ -105,7 +105,7 @@ function readSharedSource(repositoryRoot) {
 }
 
 function validateCatalogUsage(repositoryRoot) {
-    const runtimeSource = readFileSync(resolve(repositoryRoot, 'src', 'shared', 'threads-runtime.js'), 'utf8');
+    const runtimeSource = readSharedSource(repositoryRoot);
     const usedKeys = [...runtimeSource.matchAll(/\bmessage\(\s*['"]([^'"]+)['"]/g)]
         .map((match) => match[1]);
     const missing = [...new Set(usedKeys)].filter((key) => !SHARED_UI_MESSAGES.en[key]);

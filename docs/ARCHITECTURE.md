@@ -32,7 +32,11 @@ The shared tree does not call `GM_*` or `chrome.*`. Both entry points import and
 
 ## Shared modules
 
-- `threads-runtime.js` owns post discovery, buttons and menus, media selection, batch work, copy actions, filename construction calls, SPA refresh, native-share integration, capture ingestion, and hot start/stop cleanup.
+- `threads-runtime.js` coordinates post discovery, controls, copy actions, filename construction, SPA refresh, native-share integration, capture ingestion, and hot start/stop cleanup.
+- `post-text.js` owns text cleanup and extraction, with explicit callbacks for post ownership and attachment boundaries.
+- `media-resolver.js` owns image URL parsing, post-bound video selection, carousel ordering, deduplication, and visual media selection.
+- `media-dialog.js` owns the picker, previews, keyboard/focus behavior, translated per-item outcomes, and the explicit retry action. It receives media discovery and task execution callbacks rather than platform APIs.
+- `download-tasks.js` sequences authorized work and returns per-item `success`, `failed`, `not_found`, or `cancelled` outcomes and aggregate counts. An explicit retry replaces only failed/not-found outcomes and retains prior successes. Runtime route generations, feature state and cancellation signals guard asynchronous work; switching routes, disabling batch downloads or stopping the runtime clears its in-memory results.
 - `post-model.js` extracts post identity and structured media while keeping quoted, reposted, reply, and surrounding posts separate.
 - `media-policy.js` validates supported HTTPS media hosts and types, removes unsafe filename characters, and produces stable filenames.
 - `route-media-state.js` scopes captured media to a canonical route, caps each post at 32 URLs and the route map at 160 posts, and provides monotonic generation invalidation for the userscript capture path.
@@ -82,6 +86,8 @@ Video records may also carry an image-policy-validated `previewUrl`. Carousel ch
 
 Download messages are accepted only from this extension, a non-negative tab ID, the top frame, a supported non-sensitive Threads URL, and an accepted consent state. Media URL, host, type, and filename are revalidated before `chrome.downloads.download` runs. A restarted worker reconstructs all required state from packaged code plus `chrome.storage.local`; no in-memory worker state is authoritative. A deterministic integration test exercises worker disposal/recreation and verifies capture-registration reconciliation and subsequent download handling; real Chrome service-worker termination/restart remains a separate manual gate.
 
+Chrome download initiation returns an ID immediately. The adapter polls only that document's owned download through the worker, reports completion only after Chrome reports `complete`, and reports interruptions as failures. Temporary ownership metadata in `chrome.storage.session` allows reconciliation after worker suspension without storing media URLs or filenames. Cancellation is limited to owned downloads. Tampermonkey direct-download callbacks retain their manager semantics; its anchor/blob fallback records `completion: started` and displays that the file was handed to the browser, without claiming verified completion.
+
 ## Consent and data lifecycle
 
 There are two independent gates:
@@ -100,6 +106,8 @@ Persistent extension storage contains normalized feature, timing, and interface-
 Store release gates are intentionally distinct from normal development verification. `npm.cmd run verify:docs:release` also requires a public privacy URL, valid real-product screenshots, all 30 manual checks, and all seven sign-off fields. An unchecked human gate must remain visible and cannot be converted into an automated pass.
 
 The authoritative evidence ledger is `docs/TEST_MATRIX.md`; the step-by-step real-browser form is `docs/manual-test-checklist.md`; `docs/store-listing.md` is the maintained Store metadata source of truth.
+
+`npm.cmd run test:browser` loads the actual built extension into an isolated persistent Chromium profile and exercises synthetic Threads pages with real content scripts, service worker, extension storage and clipboard. Coverage includes mixed carousels, reply ownership, SPA navigation, language/theme switching and consent revocation. See `tests/browser/README.md` for setup and scope. Offline fixtures make browser behavior repeatable; live Threads and the installed Tampermonkey manager remain separate release checks.
 
 ## Security and maintenance invariants
 

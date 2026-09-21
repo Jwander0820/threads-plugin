@@ -132,3 +132,15 @@ test('userscript message factory produces complete English and Traditional Chine
     assert.equal(chinese('copyPostText'), '複製這則貼文文字');
     assert.equal(chinese('preparingDownloads', { count: 3 }), '正在準備 3 個媒體下載…');
 });
+
+test('userscript batch summaries interpolate every outcome count including zero and underscored keys', () => {
+    const counts = { success: 2, failed: 1, not_found: 3, cancelled: 0 };
+    const english = createUserscriptMessage({ languages: ['en'] });
+    const chinese = createUserscriptMessage({ languages: ['zh-TW'] });
+    assert.equal(english('downloadResultSummary', counts),
+        '2 successful · 1 failed · 3 media not found · 0 cancelled');
+    assert.equal(chinese('downloadResultSummary', counts),
+        '成功 2 項・失敗 1 項・找不到媒體 3 項・已取消 0 項');
+    assert.equal(chinese('downloadResultSummary', { success: 0, failed: 2, not_found: 0, cancelled: 0 }),
+        '成功 0 項・失敗 2 項・找不到媒體 0 項・已取消 0 項');
+});

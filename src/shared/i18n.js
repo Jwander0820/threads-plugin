@@ -68,7 +68,7 @@ export function createMessageFormatter({ locale = DEFAULT_LOCALE, catalogs }) {
     return Object.freeze(function message(key, substitutions = {}) {
         const template = selected[key] || fallback[key];
         if (typeof template !== 'string' || !template) return `[missing:${key}]`;
-        return template.replace(/\{([A-Za-z][A-Za-z0-9]*)\}/g, (match, name) =>
+        return template.replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, (match, name) =>
             Object.prototype.hasOwnProperty.call(substitutions, name)
                 ? String(substitutions[name])
                 : match

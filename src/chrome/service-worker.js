@@ -24,6 +24,7 @@ export function bootstrapServiceWorker(extensionApi = globalThis.chrome) {
     const handleDownloadMessage = createDownloadMessageHandler({
         runtimeId: extensionApi.runtime.id,
         storage: extensionApi.storage.local,
+        sessionStore: extensionApi.storage.session,
         downloads: extensionApi.downloads
     });
 
@@ -95,6 +96,13 @@ export function bootstrapServiceWorker(extensionApi = globalThis.chrome) {
     extensionApi.runtime.onStartup.addListener(requestReconcile);
     extensionApi.storage.onChanged.addListener((changes, areaName) => {
         if (areaName === 'local' && changes[CONSENT_STORAGE_KEY]) requestReconcile();
+    });
+    const cancelTabDownloads = (tabId) => {
+        void handleDownloadMessage.cancelTabDownloads(tabId).catch(() => {});
+    };
+    extensionApi.tabs?.onRemoved?.addListener(cancelTabDownloads);
+    extensionApi.tabs?.onUpdated?.addListener((tabId, changeInfo) => {
+        if (changeInfo.status === 'loading' || changeInfo.url) cancelTabDownloads(tabId);
     });
 
     extensionApi.action.onClicked.addListener(() => {

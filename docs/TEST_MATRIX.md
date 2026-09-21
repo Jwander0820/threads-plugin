@@ -2,6 +2,28 @@
 
 > Historical 5.1.0 release evidence. For 5.2.0, the owner has initially confirmed the new language selection and four independent feature controls on 2026-08-24, and the automated suite has been rerun locally. This does not replace a new exact-ZIP clean-profile matrix, service-worker restart check, Tampermonkey regression run, checksum, or final release sign-off.
 
+## Unreleased batch results and module extraction checkpoint — 2026-09-20
+
+This checkpoint describes local changes after 5.2.2; the historical release sign-off below is unchanged.
+
+| Gate | Evidence |
+| --- | --- |
+| Dual-platform build, contracts and generated freshness | `npm.cmd run verify` passed after the shared message formatter fix; both generated products match the shared source |
+| Node behavior and security regression suite | 252 tests passed, including message placeholders containing underscores, per-item outcomes, failed/not-found-only retries, reordered/duplicate carousel identity, stale work cancellation, manager abort callbacks, browser-owned completion, and worker restart/ownership checks |
+| Installed-extension Chromium regression | `npx.cmd playwright test --config tests/browser/playwright.config.mjs` passed all nine cases in 29.3 seconds against the freshly rebuilt `dist/chrome-extension`; real packaged content/service-worker/options code and Chrome APIs, disposable profiles, offline synthetic Threads fixtures |
+| Machine-readable browser result | `artifacts/browser/report.json`: 9 expected, 0 unexpected, 0 skipped, 0 flaky, no runner errors; duration 29296.322 ms; run began 2026-09-20 01:57:18 Asia/Taipei |
+| Browser cases | Mixed image/video carousel and focus; below-viewport reply ownership and clipboard; SPA/sensitive navigation; language/theme changes; consent revocation and advanced capture registration cleanup; all 16 feature-switch combinations; open-picker disable with SPA/reload persistence and default reset; text-only/unresolved-video empty state without stale media; repeated dialog and empty-selection behavior with zero download entries |
+| Dialog visual inspection | Updated modal with retry action and mixed media inspected; no overlap observed at the tested 1280×1000 viewport |
+| Diff hygiene | `git diff --check` passed |
+
+Browser setup and failure artifacts are documented in `tests/browser/README.md`. These offline cases do not establish current live Threads DOM compatibility, CDN download completion, or installed Tampermonkey behavior. Exact-release ZIP, live dual-platform checks and current-version release sign-off remain separate human gates. The userscript blob fallback explicitly reports browser handoff rather than verified file completion.
+
+The separately recorded Codex in-app browser observations and repeat steps are in [`tests/manual/live-regression.md`](../tests/manual/live-regression.md). They include a real summary interpolation defect, its shared fix, download failures with unresolved cause, and explicit limits for clipboard and extension settings access.
+
+Subsequent user-authorized local Chrome evidence is in [`tests/manual/local-chrome-2026-09-20.md`](../tests/manual/local-chrome-2026-09-20.md): a live mixed batch produced a completed JPEG and MP4 with verified file signatures and SHA-256; hover image download, reply isolation, Escape focus and light/dark theme switching also passed. The installed browser still showed the old summary placeholder and awaits extension reload, so these observations do not certify the latest formatter build or mixed-success/failure retries.
+
+The browser command reused the outputs rebuilt and checked by the preceding `npm.cmd run verify`. Its unresolved-video fixture verifies that a poster without a resolved download URL yields an empty picker; per-item `not_found` and retry outcomes remain separate Node behavior evidence. Live Codex in-app-browser findings are recorded in a separate session report and must not be inferred from these offline results.
+
 ## Release-candidate identity
 
 - Source date: 2026-08-13 (Asia/Taipei)

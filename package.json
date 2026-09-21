@@ -1,6 +1,6 @@
 {
   "name": "threads-plugin",
-  "version": "5.2.2",
+  "version": "5.3.0",
   "private": true,
   "scripts": {
     "build": "node scripts/build-all.mjs",
@@ -10,6 +10,8 @@
     "package:extension": "node scripts/package-extension.mjs",
     "package:handoff": "node scripts/package-handoff.mjs",
     "test": "node --test",
+    "test:browser": "npm run build:extension && playwright test --config tests/browser/playwright.config.mjs",
+    "test:browser:install": "playwright install chromium",
     "test:e2e": "node --test --test-isolation=none tests/chrome/content-entry.test.mjs tests/chrome/disclosure.test.mjs tests/chrome/main-capture-runtime.test.mjs tests/chrome/main-world-capture.test.mjs tests/chrome/download-handler.test.mjs tests/chrome/service-worker.test.mjs tests/e2e/built-extension.test.mjs",
     "verify:userscript": "node --check ./threads-plugin.user.js && node ./scripts/verify-threads-plugin.mjs",
     "verify:extension": "node scripts/verify-extension.mjs",
@@ -22,6 +24,7 @@
     "test:pipeline": "node --test --test-isolation=none tests/package-extension.test.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "esbuild": "^0.25.9",
     "sharp": "^0.35.3",
     "yauzl": "^3.4.0",

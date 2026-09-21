@@ -104,3 +104,15 @@ test('Chrome runtime translator reuses complete shared English and Traditional C
     assert.equal(unsupported('openMediaDownloader'), 'Open Threads Media Downloader');
     assert.equal(english('unknownRuntimeKey'), '[missing:unknownRuntimeKey]');
 });
+
+test('Chrome batch summaries interpolate every outcome count in the selected interface language', () => {
+    const counts = { success: 2, failed: 1, not_found: 3, cancelled: 0 };
+    const english = createChromeRuntimeMessage({}, { documentLanguage: 'en' });
+    const chinese = createChromeRuntimeMessage({}, { documentLanguage: 'zh-TW' });
+    assert.equal(english('downloadResultSummary', counts),
+        '2 successful · 1 failed · 3 media not found · 0 cancelled');
+    assert.equal(chinese('downloadResultSummary', counts),
+        '成功 2 項・失敗 1 項・找不到媒體 3 項・已取消 0 項');
+    assert.equal(chinese('downloadResultSummary', { success: 0, failed: 2, not_found: 0, cancelled: 0 }),
+        '成功 0 項・失敗 2 項・找不到媒體 0 項・已取消 0 項');
+});

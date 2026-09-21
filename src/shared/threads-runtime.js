@@ -1,3 +1,16 @@
+import { cleanPostTextFragment, createPostTextExtractor, getRenderedPostText } from './post-text.js';
+import {
+    resolveImageUrl,
+    selectPostBoundVideoUrl,
+    rectsOverlap,
+    finalizeModalItems,
+    uniqueElements,
+    orderMediaElementsByVisualPosition,
+    findVideoPreviewImage,
+    selectDetailMediaElements
+} from './media-resolver.js';
+import { createMediaDialog } from './media-dialog.js';
+import { runDownloadTasks, summarizeDownloadResults } from './download-tasks.js';
 import {
     buildMediaFilename,
     isImageUrl,
@@ -123,6 +136,9 @@ export async function createThreadsRuntime({
         nativeShareCloseTimer: 0,
         suppressNativeShareContextUntil: 0,
         batchDownloadInProgress: false,
+        batchResults: [],
+        batchController: null,
+        batchGeneration: 0,
         listenerDisposers: [],
         observer: null,
         initObserverTimer: 0,
@@ -136,6 +152,29 @@ export async function createThreadsRuntime({
             routeTransitions: 0
         }
     };
+
+    const {
+        renderPostMediaModal, refreshOpenPostMediaModal, buildModalItemPreviewMarkup,
+        getVideoThumbnailLayout, escapeHtml, handlePostMediaModalKeydown,
+        openPostMediaModal, closePostMediaModal, getModalDownloadItems,
+        setBatchDownloadButtonsDisabled, updateDownloadResults
+    } = createMediaDialog({
+        document, window, state, message: (...args) => message(...args), modalId: MODAL_ID,
+        getCurrentDetailPostInfo, getMediaUrlIdentity, collectDetailPostMediaItems,
+        scanInlineScriptsForVideoUrls, isBatchMediaDownloadEnabled, cleanupDetailButton,
+        toast, createUserActivationToken, isModalControlIntent, downloadModalItems,
+        getDownloadTaskKey
+    });
+
+    const { extractPostBlockText, getPostBlockTextBoundary } = createPostTextExtractor({
+        window,
+        minMediaSize: MIN_MEDIA_SIZE,
+        injectedUiSelector: `.${POST_TOOL_CLASS}, .${COPY_TOOL_CLASS}, .${LINK_TOOL_CLASS}, .${BUTTON_CLASS}, #${MODAL_ID}`,
+        isDownloadableMedia: isDownloadableHoverMedia,
+        isInsideNestedPostBlock,
+        findBestPostInfoInNode,
+        findPostInfoInNode
+    });
 
     function listen(target, type, handler, options) {
         target.addEventListener(type, handler, options);
@@ -182,6 +221,7 @@ export async function createThreadsRuntime({
         startBackgroundScanInterval();
 
         if (!isBatchMediaDownloadEnabled()) {
+            cancelBatchWork();
             cleanupDetailButton();
         }
         if (!isPerMediaDownloadEnabled()) cleanupPerMediaDownloadButton();
@@ -443,6 +483,27 @@ export async function createThreadsRuntime({
             cursor: pointer !important;
         }
 
+        #${MODAL_ID} .tm-actions button:disabled {
+            opacity: 0.5 !important;
+            cursor: default !important;
+        }
+
+        #${MODAL_ID} .tm-batch-summary {
+            padding: 0 20px 10px !important;
+            font-size: 13px !important;
+            text-align: center !important;
+        }
+
+        #${MODAL_ID} .tm-download-status {
+            font-size: 13px !important;
+            color: #333 !important;
+        }
+
+        #${MODAL_ID} .tm-download-status[data-status="failed"],
+        #${MODAL_ID} .tm-download-status[data-status="not_found"] {
+            color: #a32222 !important;
+        }
+
         #${MODAL_ID} .tm-select-row {
             display: flex !important;
             align-items: center !important;
@@ -631,32 +692,6 @@ export async function createThreadsRuntime({
         }, 2800);
     }
 
-    function pickBestFromSrcset(srcset) {
-        if (!srcset) return null;
-
-        const candidates = srcset
-            .split(',')
-            .map((item) => item.trim())
-            .map((item) => {
-                const parts = item.split(/\s+/);
-                const url = normalizeUrl(parts[0]);
-                const descriptor = parts[1] || '';
-                let weight = 0;
-
-                if (descriptor.endsWith('w')) {
-                    weight = parseInt(descriptor, 10);
-                } else if (descriptor.endsWith('x')) {
-                    weight = Math.round(parseFloat(descriptor) * 1000);
-                }
-
-                return { url, weight: Number.isFinite(weight) ? weight : 0 };
-            })
-            .filter((item) => item.url);
-
-        candidates.sort((a, b) => b.weight - a.weight);
-        return candidates[0]?.url || null;
-    }
-
     function isVisibleRect(rect) {
         return (
             rect.width >= MIN_MEDIA_SIZE &&
@@ -665,13 +700,6 @@ export async function createThreadsRuntime({
             rect.right > 0 &&
             rect.top < window.innerHeight &&
             rect.left < window.innerWidth
-        );
-    }
-
-    function isVisibleTextRect(rect) {
-        return (
-            rect.width > 0 &&
-            rect.height > 0
         );
     }
 
@@ -720,24 +748,6 @@ export async function createThreadsRuntime({
         return isVisibleRect(video.getBoundingClientRect());
     }
 
-    function resolveImageUrl(img) {
-        const urls = [
-            pickBestFromSrcset(img.getAttribute('srcset') || img.srcset),
-            img.currentSrc,
-            img.src,
-            img.getAttribute('src')
-        ];
-
-        const picture = img.closest('picture');
-        if (picture) {
-            picture.querySelectorAll('source[srcset]').forEach((source) => {
-                urls.push(pickBestFromSrcset(source.getAttribute('srcset') || source.srcset));
-            });
-        }
-
-        return urls.map((url) => normalizeUrl(url)).find(isImageUrl) || null;
-    }
-
     function resolveVideoUrl(video, contextElement) {
         syncMediaRouteScope();
         scanInlineScriptsForVideoUrls();
@@ -758,26 +768,6 @@ export async function createThreadsRuntime({
             postId: postContext?.postId,
             videoUrlsByPostId: state.videoUrlsByPostId
         });
-    }
-
-    function selectPostBoundVideoUrl({ directUrls = [], postId, videoUrlsByPostId }) {
-        const directUrl = directUrls
-            .map((url) => validateMediaUrl(url, 'video'))
-            .find((result) => result.ok)?.url;
-        if (directUrl) return directUrl;
-
-        if (!postId || postId === 'unknown' || !(videoUrlsByPostId instanceof Map)) return null;
-        const identity = normalizePostIdentity(postId);
-        if (!identity) return null;
-        const validatedCachedUrls = (videoUrlsByPostId.get(identity) || [])
-            .map((url) => validateMediaUrl(url, 'video'))
-            .filter((result) => result.ok)
-            .map((result) => result.url);
-        const distinctUrls = new Map();
-        validatedCachedUrls.forEach((url) => {
-            distinctUrls.set(getMediaUrlIdentity(url) || url, url);
-        });
-        return distinctUrls.size === 1 ? distinctUrls.values().next().value : null;
     }
 
     function findPostInfoInNode(node) {
@@ -1028,307 +1018,6 @@ export async function createThreadsRuntime({
         return `https://www.threads.com/@${postInfo.author}/post/${postInfo.postId}`;
     }
 
-    function getRenderedText(element) {
-        if (!element) return '';
-
-        return String(element.innerText || '')
-            .replace(/\r\n?/g, '\n')
-            .replace(/^\n+|\n+$/g, '');
-    }
-
-    function escapeRegExp(text) {
-        return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-
-    function getTrailingInlineUiLabels(element, renderedText = getRenderedText(element)) {
-        if (!element || !renderedText) return [];
-        const elementRect = element.getBoundingClientRect?.();
-        if (!elementRect) return [];
-
-        return Array.from(element.querySelectorAll?.('button,[role="button"]') || [])
-            .filter((control) => !control.querySelector?.('svg,img,video,time'))
-            .map((control) => ({
-                label: getRenderedText(control).trim(),
-                rect: control.getBoundingClientRect?.()
-            }))
-            .filter(({ label, rect }) =>
-                label &&
-                !label.includes('\n') &&
-                label.length <= 64 &&
-                rect &&
-                rect.width > 0 &&
-                rect.width <= 220 &&
-                rect.height > 0 &&
-                rect.height <= 48 &&
-                Math.abs(rect.bottom - elementRect.bottom) <= 6 &&
-                new RegExp(`(?:^|\\n)[ \\t\\u00a0]*${escapeRegExp(label)}[ \\t\\u00a0]*$`).test(renderedText)
-            )
-            .map(({ label }) => label);
-    }
-
-    function stripTrailingCarouselCounter(text) {
-        let output = String(text || '');
-        const counterPatterns = [
-            /\n[ \t\u00a0]*\d+[ \t\u00a0]*\n[ \t\u00a0]*\/[ \t\u00a0]*\n[ \t\u00a0]*\d+[ \t\u00a0]*$/,
-            /\n[ \t\u00a0]*\d+[ \t\u00a0]*\/[ \t\u00a0]*\d+[ \t\u00a0]*$/
-        ];
-
-        counterPatterns.forEach((pattern) => {
-            output = output.replace(pattern, '');
-        });
-
-        return output
-            .replace(/[ \t\u00a0]+$/g, '')
-            .replace(/\n+$/g, '');
-    }
-
-    function cleanPostTextFragment(text, trailingUiLabels = []) {
-        let output = String(text || '').replace(/\r\n?/g, '\n');
-        const normalizedUiLabels = Array.from(new Set(
-            trailingUiLabels.map((label) => String(label || '').trim()).filter(Boolean)
-        )).sort((a, b) => b.length - a.length);
-
-        normalizedUiLabels.forEach((label) => {
-            output = output.replace(
-                new RegExp(`[ \\t\\u00a0]*(?:\\n[ \\t\\u00a0]*)?${escapeRegExp(label)}[ \\t\\u00a0]*(?:\\n[ \\t\\u00a0]*)*$`),
-                ''
-            );
-        });
-
-        if (normalizedUiLabels.length === 0) {
-            output = output
-                .replace(/[ \t\u00a0]*(?:\n[ \t\u00a0]*)?(?:翻譯|查看翻譯)[ \t\u00a0]*$/i, '')
-                .replace(/[ \t\u00a0]*\n[ \t\u00a0]*(?:Translate|翻訳)[ \t\u00a0]*(?:\n[ \t\u00a0]*)*$/, '');
-        }
-
-        output = stripTrailingCarouselCounter(output);
-
-        return output
-            .replace(/[ \t\u00a0]+$/g, '')
-            .replace(/^\n+|\n+$/g, '');
-    }
-
-    function getRenderedPostText(element) {
-        const renderedText = getRenderedText(element);
-        return cleanPostTextFragment(
-            renderedText,
-            getTrailingInlineUiLabels(element, renderedText)
-        );
-    }
-
-    function isThreadsMusicPlaybackControl(element) {
-        if (!element?.matches?.('button,[role=button]')) return false;
-        const label = String(element.getAttribute?.('aria-label') || '').trim();
-        return /^(?:播放|暫停|暂停)音[樂乐]$/.test(label) ||
-            /^(?:play|pause)\s+music$/i.test(label) ||
-            /^(?:音楽を再生|音楽を一時停止)$/.test(label);
-    }
-
-    function getThreadsMusicAttachmentTop(root) {
-        const rootRect = root.getBoundingClientRect();
-        return Array.from(root.querySelectorAll('[aria-label]'))
-            .filter(isThreadsMusicPlaybackControl)
-            .map((element) => element.getBoundingClientRect())
-            .filter((rect) => Number.isFinite(rect.top) && rect.bottom > rootRect.top)
-            .map((rect) => rect.top)
-            .filter((top) => top >= rootRect.top)
-            .sort((a, b) => a - b)[0];
-    }
-
-    function getPostBlockTextBoundary(root, actionBar) {
-        const rootRect = root.getBoundingClientRect();
-        const actionTop = actionBar?.getBoundingClientRect?.().top;
-        const musicAttachmentTop = getThreadsMusicAttachmentTop(root);
-        const mediaTop = Array.from(root.querySelectorAll('img, video'))
-            .filter(isDownloadableHoverMedia)
-            .map((element) => element.getBoundingClientRect())
-            .filter((rect) => rect.width >= MIN_MEDIA_SIZE && rect.height >= MIN_MEDIA_SIZE)
-            .map((rect) => rect.top)
-            .filter((top) => top >= rootRect.top)
-            .sort((a, b) => a - b)[0];
-
-        return Math.min(
-            Number.isFinite(mediaTop) ? mediaTop : Infinity,
-            Number.isFinite(musicAttachmentTop) ? musicAttachmentTop : Infinity,
-            Number.isFinite(actionTop) ? actionTop : Infinity,
-            rootRect.bottom
-        );
-    }
-
-    function isPostHeaderMetadataTextElement(element, root) {
-        if (!element?.matches?.('[dir="auto"]') || element.closest?.('a[href]')) return false;
-
-        const metadataRow = element.parentElement;
-        const headerRow = metadataRow?.previousElementSibling;
-        const contentRow = metadataRow?.nextElementSibling;
-        if (!metadataRow || !headerRow || !contentRow || !root.contains(metadataRow)) return false;
-
-        const timeElement = headerRow.querySelector?.('time[datetime], time');
-        if (!timeElement) return false;
-
-        const metadataColor = String(window.getComputedStyle(element)?.color || '');
-        const timeColor = String(window.getComputedStyle(timeElement)?.color || '');
-        if (!metadataColor || metadataColor !== timeColor) return false;
-
-        const headerRect = headerRow.getBoundingClientRect?.();
-        const metadataRect = metadataRow.getBoundingClientRect?.();
-        const contentRect = contentRow.getBoundingClientRect?.();
-        return Boolean(
-            headerRect && metadataRect && contentRect &&
-            metadataRect.top >= headerRect.bottom - 2 &&
-            contentRect.top >= metadataRect.bottom - 2
-        );
-    }
-
-    function isInlinePostHeaderMetadataTextElement(element, root) {
-        if (!element?.matches?.('[dir="auto"]')) return false;
-
-        const elementRect = element.getBoundingClientRect?.();
-        const elementColor = String(window.getComputedStyle(element)?.color || '');
-        if (!elementRect || !elementColor) return false;
-
-        let ancestor = element.parentElement;
-        for (let depth = 0; ancestor && ancestor !== root && depth < 6; depth += 1) {
-            const ancestorRect = ancestor.getBoundingClientRect?.();
-            const timeElement = ancestor.matches?.('time[datetime], time')
-                ? ancestor
-                : ancestor.querySelector?.('time[datetime], time');
-            if (ancestorRect && ancestorRect.height <= 64 && timeElement) {
-                const timeRect = timeElement.getBoundingClientRect?.();
-                const timeColor = String(window.getComputedStyle(timeElement)?.color || '');
-                const overlap = timeRect
-                    ? Math.min(elementRect.bottom, timeRect.bottom) - Math.max(elementRect.top, timeRect.top)
-                    : 0;
-                if (
-                    timeColor === elementColor &&
-                    overlap >= Math.min(elementRect.height, timeRect?.height || 0) * 0.5
-                ) {
-                    return true;
-                }
-            }
-            ancestor = ancestor.parentElement;
-        }
-
-        return false;
-    }
-
-    function isExcludedPostBlockTextElement(element, root, boundaryTop, postInfo) {
-        if (!element || !root.contains(element)) return true;
-        if (isInsideNestedPostBlock(element, root)) return true;
-        if (isPostHeaderMetadataTextElement(element, root)) return true;
-        if (isInlinePostHeaderMetadataTextElement(element, root)) return true;
-        if (element.closest(`.${POST_TOOL_CLASS}, .${COPY_TOOL_CLASS}, .${LINK_TOOL_CLASS}, .${BUTTON_CLASS}, #${MODAL_ID}`)) return true;
-        const interactiveAncestor = element.closest('button, [role="button"], nav');
-        if (interactiveAncestor && interactiveAncestor !== root && root.contains(interactiveAncestor)) return true;
-
-        const enclosingLink = element.closest('a[href]');
-        if (enclosingLink && (enclosingLink === element || enclosingLink.contains(element))) {
-            const href = enclosingLink.getAttribute('href') || '';
-            if (/\/post\//i.test(href)) {
-                const linkInfo = parsePostInfoFromUrl(href);
-                const belongsToCurrentPost = Boolean(
-                    postInfo?.postId &&
-                    linkInfo?.postId === postInfo.postId
-                );
-                if (!belongsToCurrentPost) return true;
-            } else if (/\/@[^/]+\/?$|\/search(?:\?|$)/i.test(href)) {
-                return true;
-            }
-        }
-
-        if (element.querySelector('time, video')) return true;
-        const containsPostMediaImage = Array.from(element.querySelectorAll('img'))
-            .some((image) => {
-                const imageRect = image.getBoundingClientRect?.();
-                return Boolean(
-                    imageRect &&
-                    imageRect.width >= MIN_MEDIA_SIZE &&
-                    imageRect.height >= MIN_MEDIA_SIZE
-                );
-            });
-        if (containsPostMediaImage) return true;
-
-        const rect = element.getBoundingClientRect();
-        if (!isVisibleTextRect(rect) || rect.top >= boundaryTop || rect.bottom <= root.getBoundingClientRect().top) return true;
-
-        const text = getRenderedText(element);
-        if (!text) return true;
-        if (postInfo?.author && text.replace(/^@/, '') === postInfo.author.replace(/^@/, '')) return true;
-        if (/^\d[\d,.]*\s*$/.test(text)) return true;
-        if (/^\d+\s*(秒|分鐘?|分|小時|天|週|周|個月|月|年)\s*$/.test(text)) return true;
-
-        return false;
-    }
-
-    function scorePostBlockTextElement(element, root, boundaryTop) {
-        const text = getRenderedText(element);
-        const rect = element.getBoundingClientRect();
-        const rootRect = root.getBoundingClientRect();
-        const lineCount = text.split('\n').length;
-        const whiteSpace = window.getComputedStyle(element).whiteSpace || '';
-        const hasNestedInteractiveContent = Boolean(element.querySelector('button, [role="button"], img, video, time'));
-        let score = text.length * 8;
-
-        score += Math.min(lineCount, 20) * 30;
-        score += element.matches('[dir="auto"]') ? 420 : 0;
-        score += /pre|break-spaces/.test(whiteSpace) ? 220 : 0;
-        score += rect.width >= 180 ? 80 : 0;
-        score += Math.min(160, Math.max(0, rect.top - rootRect.top) * 0.45);
-
-        if (hasNestedInteractiveContent) score -= 900;
-        if (rect.bottom > boundaryTop + 4) score -= 500;
-        if (text.length <= 2) score -= 80;
-
-        return score;
-    }
-
-    function extractPostBlockText(root, actionBar) {
-        if (!root) return '';
-
-        const boundaryTop = getPostBlockTextBoundary(root, actionBar);
-        const postInfo = findBestPostInfoInNode(root, actionBar || root, true) ||
-            findPostInfoInNode(root);
-        const collectCandidates = (elements) => elements
-            .filter((element) => !isExcludedPostBlockTextElement(element, root, boundaryTop, postInfo))
-            .map((element) => ({
-                element,
-                text: getRenderedPostText(element),
-                rect: element.getBoundingClientRect(),
-                score: scorePostBlockTextElement(element, root, boundaryTop)
-            }))
-            .filter((item) => item.text)
-            .sort((a, b) => b.score - a.score);
-        let candidates = collectCandidates(Array.from(root.querySelectorAll('[dir="auto"]')));
-
-        if (candidates.length === 0) {
-            candidates = collectCandidates(Array.from(root.querySelectorAll('p, div, span')));
-        }
-
-        const orderedCandidates = candidates
-            .filter((item) => !candidates.some((other) =>
-                other !== item &&
-                item.element.contains(other.element) &&
-                other.text === item.text
-            ))
-            .sort((a, b) => (a.rect.top - b.rect.top) || (a.rect.left - b.rect.left));
-        const fragments = [];
-
-        orderedCandidates.forEach((item) => {
-            const text = item.text;
-            if (!text) return;
-            if (fragments.some((fragment) => fragment === text || fragment.includes(text))) return;
-
-            for (let index = fragments.length - 1; index >= 0; index -= 1) {
-                if (text.includes(fragments[index])) {
-                    fragments.splice(index, 1);
-                }
-            }
-            fragments.push(text);
-        });
-
-        return stripTrailingCarouselCounter(fragments.join('\n'));
-    }
-
     function copyPostBlockText(root, actionBar, activationToken) {
         if (!isCopyPostTextEnabled() || !isValidUserActivationToken(activationToken)) return false;
         const text = extractPostBlockText(root, actionBar);
@@ -1521,7 +1210,7 @@ export async function createThreadsRuntime({
     }
 
     function downloadItem(item, activationToken, options = {}) {
-        if (stopped || !isValidUserActivationToken(activationToken)) return Promise.resolve(false);
+        if (stopped || options.signal?.aborted || !isValidUserActivationToken(activationToken)) return Promise.resolve(false);
 
         const expectedType = item?.type === 'image' || item?.type === 'video' ? item.type : null;
         const validated = validateMediaUrl(item?.url, expectedType);
@@ -1555,9 +1244,10 @@ export async function createThreadsRuntime({
             let gmWatchdogTimer = null;
             let overallWatchdogTimer = null;
             const stopDownload = () => {
+                // Settle first: some managers synchronously call onerror from abort().
+                finish(false);
                 try { downloadHandle?.abort?.(); } catch { /* Best-effort cancellation. */ }
                 fallbackController?.abort();
-                finish(false);
             };
 
             const finish = (success) => {
@@ -1567,10 +1257,12 @@ export async function createThreadsRuntime({
                 if (overallWatchdogTimer) clearTimer(overallWatchdogTimer);
                 if (!success) fallbackController?.abort();
                 state.lifecycleController.signal.removeEventListener?.('abort', stopDownload);
+                options.signal?.removeEventListener?.('abort', stopDownload);
                 resolve(Boolean(success));
             };
 
             state.lifecycleController.signal.addEventListener?.('abort', stopDownload, { once: true });
+            options.signal?.addEventListener?.('abort', stopDownload, { once: true });
 
             const failWithoutFallback = (error) => {
                 warn('download rejected without blob fallback', error);
@@ -1603,9 +1295,12 @@ export async function createThreadsRuntime({
                     watchdogMs: blobWatchdogMs,
                     signal: fallbackController?.signal
                 }).then((finalName) => {
+                    if (settled) return;
+                    options.onOutcome?.({ completion: 'started' });
                     toast(message('downloadStarted', { filename: finalName }));
                     finish(true);
                 }).catch((blobError) => {
+                    if (settled) return;
                     warn('fallback download failed', blobError);
                     toast(message('downloadFailed'));
                     finish(false);
@@ -1614,6 +1309,9 @@ export async function createThreadsRuntime({
 
             const armGmIdleWatchdog = () => {
                 if (settled || fallbackStarted) return;
+                // Chrome owns transfer timing (including pauses/background tabs).
+                // Its adapter reports terminal status; manager watchdogs apply to GM only.
+                if (platform.tracksDownloadCompletion === true) return;
                 if (gmWatchdogTimer) clearTimer(gmWatchdogTimer);
                 if (overallWatchdogTimer) clearTimer(overallWatchdogTimer);
                 overallWatchdogTimer = setTimer(() => {
@@ -1648,7 +1346,8 @@ export async function createThreadsRuntime({
                 saveAs: false,
                 onload: () => {
                     if (fallbackStarted || settled) return;
-                    toast(message('downloadStarted', { filename }));
+                    options.onOutcome?.({ completion: 'completed' });
+                    toast(message('downloadCompleted', { filename }));
                     finish(true);
                 },
                 onerror: (error) => {
@@ -2258,19 +1957,6 @@ export async function createThreadsRuntime({
         }
         listen(document, 'scroll', refreshButtonsSoon, true);
         listen(window, 'resize', refreshButtonsSoon, true);
-    }
-
-    function rectsOverlap(a, b) {
-        const left = Math.max(a.left, b.left);
-        const top = Math.max(a.top, b.top);
-        const right = Math.min(a.right, b.right);
-        const bottom = Math.min(a.bottom, b.bottom);
-        const width = Math.max(0, right - left);
-        const height = Math.max(0, bottom - top);
-        const overlapArea = width * height;
-        const smallerArea = Math.min(a.width * a.height, b.width * b.height);
-
-        return smallerArea > 0 && overlapArea / smallerArea > 0.45;
     }
 
     function findAssociatedVideoForImage(img, knownVideos) {
@@ -3580,159 +3266,6 @@ export async function createThreadsRuntime({
         state.detailRoute = routeKey;
     }
 
-    function getModalItemIdentity(item, rectKey) {
-        const resolvedKey = getMediaUrlIdentity(item.resolvedUrl);
-        if (resolvedKey) return `${item.type}:${resolvedKey}`;
-
-        const previewKey = getMediaUrlIdentity(item.previewUrl);
-        if (previewKey) return `${item.type}:${previewKey}`;
-
-        return `${item.type}:rect:${rectKey}`;
-    }
-
-    function dedupeModalItems(items) {
-        const structuredSlots = [];
-        const itemByKey = new Map();
-
-        items.forEach((item) => {
-            if (!item.resolvedUrl) return;
-
-            if (Number.isInteger(item.structuredSlotIndex)) {
-                structuredSlots.push(item);
-                return;
-            }
-
-            const rect = item.element?.getBoundingClientRect?.() || { left: item.indexHint || 0, top: item.indexHint || 0, width: 0, height: 0 };
-            const rectKey = [
-                Math.round(rect.left / 12),
-                Math.round(rect.top / 12),
-                Math.round(rect.width / 12),
-                Math.round(rect.height / 12)
-            ].join(':');
-            const key = getModalItemIdentity(item, rectKey);
-            const existing = itemByKey.get(key);
-
-            if (!existing || (!existing.previewUrl && item.previewUrl)) {
-                itemByKey.set(key, item);
-            }
-        });
-
-        return [...structuredSlots, ...itemByKey.values()].map((item, index) => {
-            const { structuredSlotIndex, ...publicItem } = item;
-            return { ...publicItem, index: index + 1, selected: false };
-        });
-    }
-
-    function orderModalItemsFromStructuredMedia(structuredItems, fallbackItems) {
-        const orderedStructuredItems = Array.from(structuredItems || []);
-        const availableItems = Array.from(fallbackItems || []).filter((item) => item?.resolvedUrl);
-        const usedItems = new Set();
-        const exactMatches = new Map();
-
-        orderedStructuredItems.forEach((structuredItem, structuredSlotIndex) => {
-            const exactMatch = availableItems.find((item) =>
-                !usedItems.has(item) &&
-                item.type === structuredItem.type &&
-                areMediaUrlsEquivalent(item.resolvedUrl, structuredItem?.resolvedUrl)
-            );
-            if (!exactMatch) return;
-            usedItems.add(exactMatch);
-            exactMatches.set(structuredSlotIndex, exactMatch);
-        });
-
-        orderedStructuredItems.forEach((structuredItem, index) => {
-            if (exactMatches.has(index) || structuredItem.type !== 'video') return;
-            const poster = availableItems.find(item => !usedItems.has(item) && item.type === 'image' &&
-                areMediaUrlsEquivalent(item.resolvedUrl, structuredItem.previewUrl));
-            if (!poster) return;
-            usedItems.add(poster);
-            exactMatches.set(index, poster);
-        });
-
-        const orderedItems = orderedStructuredItems.map((structuredItem, structuredSlotIndex) => {
-            const exactMatch = exactMatches.get(structuredSlotIndex);
-            if (!exactMatch) return { ...structuredItem, structuredSlotIndex };
-            return {
-                ...exactMatch,
-                ...structuredItem,
-                element: exactMatch.element || structuredItem.element,
-                previewUrl: exactMatch.previewUrl || structuredItem.previewUrl || '',
-                structuredSlotIndex
-            };
-        });
-
-        return [
-            ...orderedItems,
-            ...availableItems.filter((item) => !usedItems.has(item))
-        ];
-    }
-
-    function finalizeModalItems({ rawItems, cachedImageItems, cachedVideoItems, structuredItems = [] }) {
-        // An IG embed can expose only its poster in structured data while the
-        // native player already has the MP4. Prefer that confirmed association.
-        structuredItems = structuredItems.map(item => {
-            if (item.type !== 'image') return item;
-            const video = rawItems.find(candidate => candidate.type === 'video' &&
-                validateMediaUrl(candidate.resolvedUrl, 'video').ok &&
-                areMediaUrlsEquivalent(candidate.previewUrl, item.resolvedUrl));
-            return video ? { ...item, ...video } : item;
-        });
-        const fallbackItems = [
-            ...rawItems,
-            ...cachedImageItems,
-            ...cachedVideoItems
-        ];
-        // Once the API supplied carousel slots, cache entries are alternate URLs for
-        // those slots rather than additional media.  Keep DOM-only leftovers as a
-        // compatibility fallback, but do not append cache variants after the
-        // authoritative structured sequence.
-        const items = structuredItems.length > 0
-            ? orderModalItemsFromStructuredMedia(structuredItems, rawItems)
-            : fallbackItems;
-        return dedupeModalItems(items);
-    }
-
-    function uniqueElements(elements) {
-        const seen = new Set();
-        return elements.filter((element) => {
-            if (!element || seen.has(element)) return false;
-            seen.add(element);
-            return true;
-        });
-    }
-
-    function orderMediaElementsByVisualPosition(elements) {
-        return Array.from(elements || [])
-            .map((element, originalIndex) => {
-                const rect = element?.getBoundingClientRect?.() || {};
-                const top = Number(rect.top);
-                const left = Number(rect.left);
-                return {
-                    element,
-                    originalIndex,
-                    top: Number.isFinite(top) ? top : Infinity,
-                    left: Number.isFinite(left) ? left : Infinity
-                };
-            })
-            .sort((a, b) => {
-                const aRow = Number.isFinite(a.top) ? Math.round(a.top / 12) : Infinity;
-                const bRow = Number.isFinite(b.top) ? Math.round(b.top / 12) : Infinity;
-                return (aRow - bRow) ||
-                    (a.left - b.left) ||
-                    (a.top - b.top) ||
-                    (a.originalIndex - b.originalIndex);
-            })
-            .map(({ element }) => element);
-    }
-
-    function findVideoPreviewImage(video, images) {
-        if (!video) return null;
-
-        const videoRect = video.getBoundingClientRect();
-        const cover = images.find((img) => rectsOverlap(img.getBoundingClientRect(), videoRect));
-        return cover ? resolveImageUrl(cover) : null;
-    }
-
     function collectDetailPostImages(root, postId) {
         if (!root) return [];
 
@@ -3754,15 +3287,6 @@ export async function createThreadsRuntime({
         // Ownership is checked by the caller; batch discovery must not apply
         // viewport or top-left hover-button heuristics to native IG players.
         return rect.width >= MIN_MEDIA_SIZE && rect.height >= MIN_MEDIA_SIZE;
-    }
-
-    function selectDetailMediaElements(images, videos, pageMedia) {
-        const allVideos = uniqueElements([...videos, ...pageMedia.filter(element => element.tagName === 'VIDEO')]);
-        // The page-band scan may omit an embedded player. Never discard the
-        // owned player together with its overlapping poster.
-        return orderMediaElementsByVisualPosition(uniqueElements([...images, ...allVideos, ...pageMedia])
-            .filter(element => element.tagName !== 'IMG' ||
-                !allVideos.some(video => rectsOverlap(element.getBoundingClientRect(), video.getBoundingClientRect()))));
     }
 
     function collectVisibleDetailPageMedia(root, postId) {
@@ -3885,370 +3409,116 @@ export async function createThreadsRuntime({
         return finalizeModalItems({ rawItems, cachedImageItems, cachedVideoItems, structuredItems });
     }
 
-    function ensurePostMediaModal() {
-        let modal = document.getElementById(MODAL_ID);
-        if (modal) return modal;
-
-        modal = document.createElement('div');
-        modal.id = MODAL_ID;
-        modal.dataset.tmHidden = '1';
-        modal.innerHTML = `
-            <div class="tm-modal" role="dialog" aria-modal="true" aria-labelledby="tm-post-media-modal-title">
-                <div class="tm-modal-head">
-                    <div class="tm-modal-title" id="tm-post-media-modal-title">${escapeHtml(message('modalTitle'))}</div>
-                    <div class="tm-modal-subtitle"></div>
-                    <button type="button" class="tm-close" aria-label="${escapeHtml(message('close'))}" title="${escapeHtml(message('close'))}">×</button>
-                </div>
-                <div class="tm-actions">
-                    <button type="button" data-action="download-selected">${escapeHtml(message('downloadSelected'))}</button>
-                    <button type="button" data-action="download-all">${escapeHtml(message('downloadAll'))}</button>
-                </div>
-                <label class="tm-select-row">
-                    <input type="checkbox" data-action="select-all">
-                    <span>${escapeHtml(message('selectAll'))}</span>
-                </label>
-                <div class="tm-list"></div>
-            </div>
-        `;
-        const modalControls = Object.freeze({
-            selectAll: modal.querySelector('[data-action=select-all]'),
-            downloadSelected: modal.querySelector('[data-action=download-selected]'),
-            downloadAll: modal.querySelector('[data-action=download-all]')
-        });
-
-        modal.addEventListener('click', (event) => {
-            if (event.target === modal || event.target?.classList?.contains('tm-close')) {
-                closePostMediaModal();
-                return;
-            }
-
-            if (isModalControlIntent(event.target, modalControls, 'selectAll')) {
-                setModalSelection(event.target.checked);
-                return;
-            }
-
-            if (isModalControlIntent(event.target, modalControls, 'downloadSelected')) {
-                const activationToken = createUserActivationToken(event);
-                if (activationToken) downloadModalItems(false, activationToken);
-                return;
-            }
-
-            if (isModalControlIntent(event.target, modalControls, 'downloadAll')) {
-                const activationToken = createUserActivationToken(event);
-                if (activationToken) downloadModalItems(true, activationToken);
-                return;
-            }
-
-            const previewButton = event.target?.closest?.('button.tm-open');
-            if (previewButton && modal.contains(previewButton)) {
-                const item = state.modalItems[Number(previewButton.dataset.index)];
-                if (item?.previewUrl) window.open(item.previewUrl, '_blank', 'noopener,noreferrer');
-            }
-        }, true);
-
-        modal.addEventListener('change', (event) => {
-            if (event.target?.dataset?.index == null) return;
-
-            const item = state.modalItems[Number(event.target.dataset.index)];
-            if (item) item.selected = event.target.checked;
-            syncSelectAllState();
-        });
-        modal.addEventListener('keydown', handlePostMediaModalKeydown, true);
-
-        document.body.appendChild(modal);
-        return modal;
-    }
-
-    function renderPostMediaModal() {
-        const modal = ensurePostMediaModal();
-        const postInfo = getCurrentDetailPostInfo() || { postId: 'unknown' };
-        const subtitle = modal.querySelector('.tm-modal-subtitle');
-        const list = modal.querySelector('.tm-list');
-
-        subtitle.textContent = `${message('postIdLabel')}: ${postInfo.postId}`;
-        list.innerHTML = '';
-
-        if (state.modalItems.length === 0) {
-            list.innerHTML = `<div class="tm-empty">${escapeHtml(message('noMedia'))}</div>`;
-            return;
+    function areDownloadTaskItemsEquivalent(first, second) {
+        if (first.type !== second.type ||
+            (first.postInfo?.postId || '') !== (second.postInfo?.postId || '')) return false;
+        if (first.resolvedUrl && second.resolvedUrl) {
+            return areMediaUrlsEquivalent(first.resolvedUrl, second.resolvedUrl);
         }
-
-        state.modalItems.forEach((item, index) => {
-            const row = document.createElement('div');
-            row.className = 'tm-item';
-
-            const mediaLabel = message('mediaLabel', {
-                type: message(item.type === 'video' ? 'video' : 'photo'),
-                index: index + 1
-            });
-            const preview = buildModalItemPreviewMarkup(item);
-
-            row.innerHTML = `
-                <div class="tm-check-cell">
-                    <input type="checkbox" data-index="${index}" ${item.selected ? 'checked' : ''}>
-                </div>
-                <div class="tm-preview">
-                    ${preview}
-                    <div>- ${escapeHtml(mediaLabel)} -</div>
-                </div>
-                <div class="tm-open-cell">
-                    <button type="button" class="tm-open" data-action="open-preview" data-index="${index}" title="${escapeHtml(message('openPreview'))}" aria-label="${escapeHtml(message('openPreview'))}">↗</button>
-                </div>
-            `;
-            const videoThumbnail = row.querySelector('.tm-video-thumbnail');
-            if (videoThumbnail) applyVideoThumbnailLayout(videoThumbnail, item);
-            list.appendChild(row);
-        });
-
-        syncSelectAllState();
-    }
-
-    function getModalItemsSnapshot(items) {
-        return (items || []).map((item) => [
-            item.type,
-            getMediaUrlIdentity(item.previewUrl),
-            getMediaUrlIdentity(item.resolvedUrl)
-        ].join(':')).join('|');
-    }
-
-    function refreshOpenPostMediaModal() {
-        const modal = document.getElementById(MODAL_ID);
-        if (!modal || modal.dataset.tmHidden === '1') return false;
-
-        const previousItems = state.modalItems;
-        const nextItems = collectDetailPostMediaItems();
-        if (getModalItemsSnapshot(previousItems) === getModalItemsSnapshot(nextItems)) return false;
-
-        const selectionByMedia = new Map(previousItems.map((item) => [
-            `${item.type}:${getMediaUrlIdentity(item.resolvedUrl || item.previewUrl)}`,
-            item.selected
-        ]));
-        nextItems.forEach((item) => {
-            const key = `${item.type}:${getMediaUrlIdentity(item.resolvedUrl || item.previewUrl)}`;
-            if (selectionByMedia.has(key)) item.selected = selectionByMedia.get(key);
-        });
-        state.modalItems = nextItems;
-        renderPostMediaModal();
-        return true;
-    }
-
-    function buildModalItemPreviewMarkup(item) {
-        if (item?.type === 'video') {
-            const poster = validateMediaUrl(item.previewUrl, 'image');
-            const video = validateMediaUrl(item.resolvedUrl, 'video');
-            let media = '';
-
-            if (poster.ok) {
-                media = `<img src="${escapeHtml(poster.url)}" alt="">`;
-            } else if (video.ok) {
-                const previewUrl = new URL(video.url);
-                previewUrl.hash = 't=0.1';
-                media = `<video src="${escapeHtml(previewUrl.href)}" muted playsinline preload="metadata" aria-hidden="true"></video>`;
-            }
-
-            return `
-                <div class="tm-video-thumbnail" data-orientation="landscape">
-                    <span class="tm-video-thumbnail-fallback">${escapeHtml(message('video'))}</span>
-                    ${media}
-                    <span class="tm-video-play-badge" aria-hidden="true">▶</span>
-                </div>
-            `;
-        }
-
-        const image = validateMediaUrl(item?.previewUrl || item?.resolvedUrl, 'image');
-        return image.ok
-            ? `<img src="${escapeHtml(image.url)}" alt="">`
-            : `<div>${escapeHtml(message('photo'))}</div>`;
-    }
-
-    function getVideoThumbnailLayout(videoWidth, videoHeight) {
-        const width = Number(videoWidth);
-        const height = Number(videoHeight);
-        if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-            return { orientation: 'landscape', aspectRatio: '16 / 9' };
-        }
-
-        return {
-            orientation: width === height ? 'square' : (width < height ? 'portrait' : 'landscape'),
-            aspectRatio: `${width} / ${height}`
-        };
-    }
-
-    function applyVideoThumbnailLayout(thumbnail, item) {
-        const apply = (width, height) => {
-            const layout = getVideoThumbnailLayout(width, height);
-            thumbnail.dataset.orientation = layout.orientation;
-            thumbnail.style.setProperty('--tm-video-aspect-ratio', layout.aspectRatio);
-        };
-        const sourceVideo = item?.element?.tagName === 'VIDEO' ? item.element : null;
-        const previewVideo = thumbnail.querySelector('video');
-
-        if (sourceVideo?.videoWidth > 0 && sourceVideo?.videoHeight > 0) {
-            apply(sourceVideo.videoWidth, sourceVideo.videoHeight);
-        }
-
-        if (!previewVideo) return;
-        const applyPreviewMetadata = () => apply(previewVideo.videoWidth, previewVideo.videoHeight);
-        if (previewVideo.videoWidth > 0 && previewVideo.videoHeight > 0) {
-            applyPreviewMetadata();
-        } else {
-            previewVideo.addEventListener('loadedmetadata', applyPreviewMetadata, { once: true });
-        }
-    }
-
-    function escapeHtml(value) {
-        return String(value || '')
-            .replace(/&/g, '&amp;')
-            .replace(/"/g, '&quot;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-    }
-
-    function getPostMediaModalFocusableControls(modal) {
-        return Array.from(modal?.querySelectorAll?.(
-            'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
-        ) || []).filter((control) =>
-            control?.dataset?.tmHidden !== '1' &&
-            control?.getAttribute?.('aria-hidden') !== 'true'
+        return areMediaUrlsEquivalent(first.previewUrl, second.previewUrl) || Boolean(
+            first.element && first.element === second.element &&
+            /^(IMG|VIDEO)$/.test(first.element.tagName)
         );
     }
 
-    function handlePostMediaModalKeydown(event) {
-        const modal = document.getElementById(MODAL_ID);
-        if (!modal || modal.dataset.tmHidden === '1') return false;
-        if (event?.key === 'Escape') {
-            event.preventDefault?.();
-            event.stopPropagation?.();
-            closePostMediaModal();
-            return true;
-        }
-        if (event?.key !== 'Tab') return false;
-        const controls = getPostMediaModalFocusableControls(modal);
-        if (!controls.length) {
-            event.preventDefault?.();
-            return true;
-        }
-        const activeIndex = controls.indexOf(document.activeElement);
-        const nextIndex = event.shiftKey
-            ? (activeIndex <= 0 ? controls.length - 1 : activeIndex - 1)
-            : (activeIndex < 0 || activeIndex === controls.length - 1 ? 0 : activeIndex + 1);
-        event.preventDefault?.();
-        controls[nextIndex]?.focus?.();
-        return true;
+    function getDownloadTaskOccurrence(item, index, items) {
+        return items.slice(0, index).filter(previous =>
+            areDownloadTaskItemsEquivalent(previous, item)
+        ).length;
     }
 
-    function openPostMediaModal() {
-        if (!isBatchMediaDownloadEnabled()) {
-            cleanupDetailButton();
-            toast(message('pickerDisabled'));
-            return;
-        }
+    function getDownloadTaskKey(item, index = 0, items = state.modalItems) {
+        const occurrence = getDownloadTaskOccurrence(item, index, items);
+        const previous = state.batchResults.find(result =>
+            result.item.taskOccurrence === occurrence &&
+            areDownloadTaskItemsEquivalent(result.item, item)
+        );
+        if (previous) return previous.key;
 
-        state.modalReturnFocus = document.activeElement?.isConnected
-            ? document.activeElement
-            : state.detailButton;
-        scanInlineScriptsForVideoUrls();
-        state.modalItems = collectDetailPostMediaItems();
-        const modal = ensurePostMediaModal();
-        renderPostMediaModal();
-        modal.dataset.tmHidden = '0';
-        modal.querySelector('.tm-close')?.focus?.();
+        const identity = getMediaUrlIdentity(item.resolvedUrl) || getMediaUrlIdentity(item.previewUrl) ||
+            `unresolved-slot:${item.index ?? index + 1}`;
+        return [item.postInfo?.postId || '', item.type, identity, occurrence].join(':');
     }
 
-    function closePostMediaModal() {
-        const modal = document.getElementById(MODAL_ID);
-        if (modal) modal.dataset.tmHidden = '1';
-        const returnFocus = state.modalReturnFocus;
-        state.modalReturnFocus = null;
-        if (returnFocus?.isConnected) returnFocus.focus?.();
-    }
-
-    function setModalSelection(checked) {
-        state.modalItems.forEach((item) => {
-            item.selected = checked;
-        });
-        renderPostMediaModal();
-    }
-
-    function syncSelectAllState() {
-        const modal = document.getElementById(MODAL_ID);
-        if (!modal) return;
-
-        const checkbox = modal.querySelector('input[data-action="select-all"]');
-        if (!checkbox) return;
-
-        const total = state.modalItems.length;
-        const selected = state.modalItems.filter((item) => item.selected).length;
-        checkbox.checked = total > 0 && selected === total;
-        checkbox.indeterminate = selected > 0 && selected < total;
-    }
-
-    function getModalDownloadItems(items, downloadAll) {
-        return items.filter((item) => downloadAll || item.selected);
-    }
-
-    function setBatchDownloadButtonsDisabled(disabled) {
-        const modal = typeof document !== 'undefined' ? document.getElementById?.(MODAL_ID) : null;
-        modal?.querySelectorAll?.('[data-action="download-selected"], [data-action="download-all"]')
-            .forEach((button) => {
-                button.disabled = disabled;
-            });
+    function cancelBatchWork() {
+        state.batchController?.abort();
+        state.batchController = null;
+        state.batchGeneration += 1;
+        state.batchDownloadInProgress = false;
+        state.batchResults = [];
+        updateDownloadResults();
     }
 
     async function downloadModalItems(downloadAll, activationToken, options = {}) {
-        if (!isBatchMediaDownloadEnabled() || !isValidUserActivationToken(activationToken)) return false;
+        if (stopped || !isBatchMediaDownloadEnabled() || !isValidUserActivationToken(activationToken)) return false;
         if (state.batchDownloadInProgress) return false;
+        syncMediaRouteScope();
 
         const sourceItems = Array.isArray(options.items) ? options.items : state.modalItems;
-        const items = getModalDownloadItems(sourceItems, downloadAll).slice();
-
-        if (items.length === 0) {
+        const indexedItems = sourceItems.map((item, index) => ({
+            ...item,
+            taskIndex: index,
+            taskOccurrence: getDownloadTaskOccurrence(item, index, sourceItems),
+            key: getDownloadTaskKey(item, index, sourceItems)
+        }));
+        const items = options.retryOnly ? indexedItems : getModalDownloadItems(indexedItems, downloadAll);
+        const previousResults = options.retryOnly ? state.batchResults.slice() : [];
+        const retryKeys = new Set(previousResults.filter(result =>
+            result.status === 'failed' || result.status === 'not_found'
+        ).map(result => result.key));
+        if (!items.length || (options.retryOnly && !items.some(item => retryKeys.has(item.key)))) {
             toast(message('nothingSelected'));
-            return false;
+            return { results: previousResults, counts: summarizeDownloadResults(previousResults), completed: true };
         }
 
+        const generation = ++state.batchGeneration;
+        const controller = new AbortController();
+        state.batchController = controller;
         state.batchDownloadInProgress = true;
+        if (!options.retryOnly) state.batchResults = [];
         setBatchDownloadButtonsDisabled(true);
+        updateDownloadResults();
         const downloadFn = options.downloadFn || downloadItem;
         const resolveItem = options.resolveItem || mediaItemFromElementWithRetry;
         const delayFn = options.delayFn || ((delayMs) =>
             new Promise((resolve) => window.setTimeout(resolve, delayMs))
         );
-
+        const isActive = () => !stopped && generation === state.batchGeneration &&
+            isBatchMediaDownloadEnabled() && isValidUserActivationToken(activationToken);
         try {
-            toast(message('preparingDownloads', { count: items.length }));
-
-            for (const modalItem of items) {
-                if (stopped || !isBatchMediaDownloadEnabled() || !isValidUserActivationToken(activationToken)) return false;
-                const resolved = modalItem.resolvedUrl
-                    ? {
-                        type: modalItem.type,
-                        url: modalItem.resolvedUrl,
-                        element: modalItem.element,
-                        contextElement: modalItem.element,
-                        postInfo: modalItem.postInfo
-                    }
-                    : await resolveItem(modalItem.element);
-                if (stopped || !isBatchMediaDownloadEnabled() || !isValidUserActivationToken(activationToken)) return false;
-                if (!resolved) {
-                    toast(message('mediaLinkNotFound', {
-                        type: message(modalItem.type === 'video' ? 'video' : 'photo'),
-                        index: modalItem.index
-                    }));
-                    continue;
+            toast(message('preparingDownloads', {
+                count: options.retryOnly ? items.filter(item => retryKeys.has(item.key)).length : items.length
+            }));
+            return await runDownloadTasks({
+                items, previousResults, retryOnly: options.retryOnly,
+                signal: controller.signal, isActive,
+                resolveItem: item => item.resolvedUrl ? {
+                    type: item.type, url: item.resolvedUrl, element: item.element,
+                    contextElement: item.element, postInfo: item.postInfo
+                } : resolveItem(item.element),
+                async downloadItem(resolved, item) {
+                    let completion;
+                    const ok = await downloadFn({
+                        ...resolved, contextElement: item.element
+                    }, activationToken, {
+                        ...options.downloadOptions, signal: controller.signal,
+                        onOutcome(outcome) { completion = outcome.completion; }
+                    });
+                    return { ok, ...(completion ? { completion } : {}) };
+                },
+                delay: delayFn,
+                onResult(_result, results) {
+                    if (!isActive()) return;
+                    state.batchResults = results;
+                    updateDownloadResults();
                 }
-
-                await downloadFn({
-                    ...resolved,
-                    contextElement: modalItem.element
-                }, activationToken, options.downloadOptions || {});
-                if (stopped) return false;
-                await delayFn(320);
-            }
-            return true;
+            });
         } finally {
-            state.batchDownloadInProgress = false;
-            setBatchDownloadButtonsDisabled(false);
+            if (generation === state.batchGeneration) {
+                state.batchDownloadInProgress = false;
+                state.batchController = null;
+                updateDownloadResults();
+            }
         }
     }
 
@@ -4273,6 +3543,7 @@ export async function createThreadsRuntime({
 
         state.mediaRouteKey = nextScope.routeKey;
         if (nextScope.changed) {
+            cancelBatchWork();
             state.diagnostics.routeTransitions += 1;
             state.videoUrlsByPostId.clear();
             state.imageUrlsByPostId.clear();
@@ -4916,6 +4187,7 @@ export async function createThreadsRuntime({
     async function stop() {
         if (stopped) return false;
         stopped = true;
+        cancelBatchWork();
         state.lifecycleController.abort();
         state.disposeSettingsUi?.();
         state.disposeStyles?.();
@@ -4980,6 +4252,7 @@ export async function createThreadsRuntime({
 
     async function updateOptions(nextOptions) {
         Object.assign(USER_OPTIONS, normalizeOptions({ ...USER_OPTIONS, ...nextOptions }));
+        if (!isBatchMediaDownloadEnabled()) cancelBatchWork();
         if (started && !stopped && !IS_NODE_RUNTIME) applyUserOptions();
         return Object.freeze({ ...USER_OPTIONS });
     }

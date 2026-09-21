@@ -21,6 +21,9 @@ export function createChromePlatformAdapter(environment = globalThis) {
     }
 
     return {
+        // Chrome owns transfer timeouts and pause/resume. Content-script timers
+        // can be throttled in background tabs and must not abort its downloads.
+        get tracksDownloadCompletion() { return true; },
         async loadOptions() {
             const stored = await chromeApi.storage.local.get(OPTIONS_STORAGE_KEY);
             return normalizeOptions(stored[OPTIONS_STORAGE_KEY]);
@@ -72,19 +75,80 @@ export function createChromePlatformAdapter(environment = globalThis) {
         },
         downloadMedia(details) {
             let aborted = false;
+            let settled = false;
+            let downloadId;
+            let pollTimer;
+            let receivedBytes = -1;
+            const setTimer = environment.setTimeout?.bind(environment) || globalThis.setTimeout;
+            const clearTimer = environment.clearTimeout?.bind(environment) || globalThis.clearTimeout;
+            const cleanup = () => {
+                if (pollTimer !== undefined) clearTimer(pollTimer);
+                pollTimer = undefined;
+            };
+            const cancel = () => {
+                if (!Number.isInteger(downloadId)) return;
+                void chromeApi.runtime.sendMessage({ type: 'CANCEL_DOWNLOAD', downloadId }).catch(() => {});
+            };
+            const fail = (error) => {
+                if (aborted || settled) return;
+                settled = true;
+                cleanup();
+                cancel();
+                details.onerror?.(error);
+            };
+            const poll = async () => {
+                if (aborted || settled) return;
+                try {
+                    const response = await chromeApi.runtime.sendMessage({ type: 'DOWNLOAD_STATUS', downloadId });
+                    if (aborted || settled) return;
+                    if (!response?.ok) {
+                        fail(runtimeError(response));
+                    } else if (response.state === 'complete') {
+                        settled = true;
+                        cleanup();
+                        details.onload?.({ downloadId });
+                    } else if (response.state === 'interrupted') {
+                        const error = runtimeError({ error: 'download_interrupted' });
+                        error.interruptReason = response.interruptReason;
+                        fail(error);
+                    } else if (response.state === 'in_progress') {
+                        if (response.bytesReceived > receivedBytes) {
+                            receivedBytes = response.bytesReceived;
+                            details.onprogress?.({ loaded: receivedBytes, total: response.totalBytes });
+                        }
+                        if (!aborted && !settled) pollTimer = setTimer(poll, 500);
+                    } else {
+                        fail(runtimeError({ error: 'download_status_unavailable' }));
+                    }
+                } catch (error) {
+                    fail(error);
+                }
+            };
             chromeApi.runtime.sendMessage({
                 type: 'DOWNLOAD_MEDIA',
                 url: details.url,
                 filename: details.name,
                 expectedType: /\.(?:mp4|m4v|mov|webm)$/i.test(details.name) ? 'video' : 'image'
             }).then((response) => {
-                if (aborted) return;
-                if (response?.ok) details.onload?.({ downloadId: response.downloadId });
-                else details.onerror?.(runtimeError(response));
+                if (!response?.ok || !Number.isInteger(response.downloadId)) {
+                    fail(runtimeError(response));
+                    return;
+                }
+                downloadId = response.downloadId;
+                if (aborted) {
+                    cancel();
+                    return;
+                }
+                void poll();
             }).catch((error) => {
-                if (!aborted) details.onerror?.(error);
+                fail(error);
             });
-            return { abort() { aborted = true; } };
+            return { abort() {
+                if (settled || aborted) return;
+                aborted = true;
+                cleanup();
+                cancel();
+            } };
         },
         async writeClipboard(text) {
             await environment.navigator.clipboard.writeText(text);

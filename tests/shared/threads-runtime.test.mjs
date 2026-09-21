@@ -1612,7 +1612,9 @@ test('disabling batch download while media resolution is pending prevents the do
     await runtime.updateOptions({ enableBatchMediaDownload: false });
     releaseResolution();
 
-    assert.equal(await pending, false);
+    const result = await pending;
+    assert.equal(result.completed, false);
+    assert.equal(result.counts.cancelled, 1);
     assert.equal(downloads, 0);
 });
 
