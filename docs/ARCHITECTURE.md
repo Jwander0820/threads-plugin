@@ -2,7 +2,7 @@
 
 ## Scope and source-of-truth rule
 
-Threads Plugin 5.2.2 is built from one repository into two installable products:
+Threads Plugin is built from one repository into two installable products:
 
 - the root `threads-plugin.user.js` for Tampermonkey;
 - the Manifest V3 extension under `dist/chrome-extension`, then the deterministic production ZIP under `artifacts`.
@@ -33,7 +33,7 @@ The shared tree does not call `GM_*` or `chrome.*`. Both entry points import and
 ## Shared modules
 
 - `threads-runtime.js` coordinates post discovery, controls, copy actions, filename construction, SPA refresh, native-share integration, capture ingestion, and hot start/stop cleanup.
-- `post-text.js` owns text cleanup and extraction, with explicit callbacks for post ownership and attachment boundaries.
+- `post-text.js` owns text cleanup and extraction, with explicit callbacks for post ownership and attachment boundaries. Translation labels require an actual trailing control. Counters require either a compact absolute-positioned overlay within media bounds or a compact painted, rounded flex thread-progress badge with separate numerator, slash and denominator children. Badge candidates and their parts are excluded before merging. The verified trailing UI determines cleanup order: counter then control, or control then counter. Each type is removed once to preserve identical body words and fractions.
 - `media-resolver.js` owns image URL parsing, post-bound video selection, carousel ordering, deduplication, and visual media selection.
 - `media-dialog.js` owns the picker, previews, keyboard/focus behavior, translated per-item outcomes, and the explicit retry action. It receives media discovery and task execution callbacks rather than platform APIs.
 - `download-tasks.js` sequences authorized work and returns per-item `success`, `failed`, `not_found`, or `cancelled` outcomes and aggregate counts. An explicit retry replaces only failed/not-found outcomes and retains prior successes. Runtime route generations, feature state and cancellation signals guard asynchronous work; switching routes, disabling batch downloads or stopping the runtime clears its in-memory results.
@@ -48,11 +48,15 @@ The shared tree does not call `GM_*` or `chrome.*`. Both entry points import and
 
 `src/userscript/entry.js` creates the shared runtime with the userscript adapter. The adapter is the only userscript layer that touches Tampermonkey APIs. It supplies `GM_addStyle`, downloads, cross-origin requests, storage, settings menu commands, clipboard access, and `unsafeWindow` access for the legacy same-page capture path.
 
+Userscript settings use one storage key per option so different tabs do not overwrite unrelated edits. The old settings snapshot is retained as migration input for options not yet saved individually. Runtime menu actions write only their changed option; an explicit reset writes all defaults. Returning focus or visibility to a tab reloads persisted settings and refreshes its controls and menu. This uses the existing grants, and its listeners are removed when the returned userscript runtime is stopped.
+
 The build creates a self-contained strict-mode IIFE with metadata generated from `config/targets.mjs`. There is no `@require`. The generated file retains the public raw update/download URLs, four Threads matches, the reviewed grants, and the reviewed media-host connect list.
 
 Disposing the runtime restores wrapped page APIs, removes styles and controls, unregisters settings commands exactly once, aborts or invalidates deferred work, clears timers and route/media state, and prevents late downloads after stop. The userscript increments a monotonic capture generation synchronously on every observed route transition, so even an A→B→A transition invalidates responses that began on the earlier A generation.
 
 ## Chrome execution worlds
+
+The options page starts with its settings fieldset and consent buttons disabled. It unlocks only after localization, options, and consent have loaded and the stored values have been rendered. Event handlers also reject actions before this point; a failed read leaves the page locked rather than saving its initial empty fields.
 
 ### ISOLATED content script
 

@@ -6,6 +6,7 @@ import {
     MAX_STRUCTURED_RECORDS_PER_ROUTE
 } from '../../src/shared/threads-runtime.js';
 import { createUserscriptMessage } from '../../src/userscript/i18n.js';
+import { ROUNDED_THREADS_SHARE_GLYPH as THREADS_ROUNDED_SHARE_GLYPH_TEST_PATH } from '../fixtures/threads-native-share-glyph.mjs';
 
 const THREADS_SHARE_GLYPH_TEST_PATH =
     'M7.2474 1.49853C4.18324 -0.187039 0.600262 2.64309 1.53038 6.01431Z';
@@ -127,7 +128,11 @@ function createThreadsActionFixture({
             childElementCount: { get() { return this.children.length; } },
             classList: {
                 get() {
-                    return { contains: (className) => this.className.split(/\s+/).includes(className) };
+                    return {
+                        contains: (className) => this.className.split(/\s+/).includes(className),
+                        add: (className) => { this.className = [...new Set([...this.className.split(/\s+/).filter(Boolean), className])].join(' '); },
+                        remove: (className) => { this.className = this.className.split(/\s+/).filter((value) => value !== className).join(' '); }
+                    };
                 }
             }
         });
@@ -402,26 +407,26 @@ test('IG embedded MP4 remains batch media above the viewport and replaces its st
     assert.deepEqual(liveResult.map(item => [item.type, item.resolvedUrl]), [['video', mp4]]);
 });
 
-test('post text cleaner removes only a trailing standalone English Translate label', async () => {
+test('post text cleaner preserves label-like body text unless a trailing UI control is identified', async () => {
     const runtime = await createThreadsRuntime({ platform: fakePlatform() });
     const { cleanPostTextFragment, getRenderedPostText } = runtime.testing;
 
-    assert.equal(cleanPostTextFragment('Hello from Threads\nTranslate'), 'Hello from Threads');
+    assert.equal(cleanPostTextFragment('Hello from Threads\nTranslate'), 'Hello from Threads\nTranslate');
     assert.equal(cleanPostTextFragment('Translate this sentence for me'), 'Translate this sentence for me');
     assert.equal(cleanPostTextFragment('I use Google Translate'), 'I use Google Translate');
     assert.equal(cleanPostTextFragment('Translate'), 'Translate');
-    assert.equal(cleanPostTextFragment('繁中貼文\n翻譯'), '繁中貼文');
-    assert.equal(cleanPostTextFragment('繁中貼文\n查看翻譯'), '繁中貼文');
-    assert.equal(cleanPostTextFragment('繁中貼文 翻譯'), '繁中貼文');
-    assert.equal(cleanPostTextFragment('繁中貼文 查看翻譯'), '繁中貼文');
-    assert.equal(cleanPostTextFragment('日本語の投稿\n翻訳'), '日本語の投稿');
+    assert.equal(cleanPostTextFragment('繁中貼文\n翻譯'), '繁中貼文\n翻譯');
+    assert.equal(cleanPostTextFragment('繁中貼文\n查看翻譯'), '繁中貼文\n查看翻譯');
+    assert.equal(cleanPostTextFragment('繁中貼文 翻譯'), '繁中貼文 翻譯');
+    assert.equal(cleanPostTextFragment('繁中貼文 查看翻譯'), '繁中貼文 查看翻譯');
+    assert.equal(cleanPostTextFragment('日本語の投稿\n翻訳'), '日本語の投稿\n翻訳');
     assert.equal(cleanPostTextFragment('翻訳してください'), '翻訳してください');
     assert.equal(cleanPostTextFragment('翻訳'), '翻訳');
-    assert.equal(cleanPostTextFragment('Hello\r\nTranslate\r\n\t'), 'Hello');
+    assert.equal(cleanPostTextFragment('Hello\r\nTranslate\r\n\t'), 'Hello\nTranslate');
     assert.equal(cleanPostTextFragment('\r\nHello\r\n'), 'Hello');
     assert.equal(cleanPostTextFragment('Hello \t\u00a0'), 'Hello');
     assert.equal(cleanPostTextFragment('Hello\r\nWorld'), 'Hello\nWorld');
-    assert.equal(cleanPostTextFragment('有濾鏡就完蛋了><\u00a0\n2\n/\n2'), '有濾鏡就完蛋了><');
+    assert.equal(cleanPostTextFragment('有濾鏡就完蛋了><\u00a0\n2\n/\n2'), '有濾鏡就完蛋了><\u00a0\n2\n/\n2');
     assert.equal(cleanPostTextFragment('作者'), '作者');
 
     const postRect = { left: 0, top: 0, width: 320, height: 42, right: 320, bottom: 42 };
@@ -553,6 +558,13 @@ test('post text extractor removes carousel and reply-context UI from a quoted po
         right: left + width,
         bottom: top + height
     });
+    const counter = {
+        innerText: '2\n/\n2',
+        getBoundingClientRect: () => makeRect(520, 145, 50, 30),
+        parentElement: {
+            querySelectorAll: () => [{ getBoundingClientRect: () => makeRect(160, 100, 420, 300) }]
+        }
+    };
     const quotedText = {
         innerText: '有濾鏡就完蛋了><\u00a0\n2\n/\n2',
         getBoundingClientRect: () => makeRect(160, 100, 420, 90),
@@ -560,7 +572,7 @@ test('post text extractor removes carousel and reply-context UI from a quoted po
         contains(candidate) { return candidate === this; },
         closest() { return null; },
         querySelector() { return null; },
-        querySelectorAll() { return []; }
+        querySelectorAll(selector) { return selector === 'div, span' ? [counter] : []; }
     };
     const replyContext = {
         innerText: '正在回覆 @jwander87',
@@ -679,6 +691,7 @@ test('post text extractor removes carousel and reply-context UI from a quoted po
             getComputedStyle(element) {
                 const isMetadata = element === replyContext || element === timeNode;
                 return {
+                    position: element === counter ? 'absolute' : 'static',
                     whiteSpace: 'pre-wrap',
                     color: isMetadata ? 'rgb(119, 119, 119)' : 'rgb(243, 245, 247)'
                 };
@@ -843,6 +856,43 @@ test('real runtime injection supports Japanese structure while English and Tradi
     }
 });
 
+test('rounded native share glyph injects copy and link tools without a translated label allowlist', async () => {
+    for (const shareLabel of ['シェアする', 'Partager', 'Teilen', null]) {
+        const fixture = createThreadsActionFixture({
+            actionLabels: ['いいね', '返信', '再投稿', shareLabel],
+            actionPaths: ['', '', '', THREADS_ROUNDED_SHARE_GLYPH_TEST_PATH]
+        });
+        const runtime = await createThreadsRuntime({
+            platform: fakePlatform(), document: fixture.document, window: fixture.window, initialOptions: {}
+        });
+        runtime.testing.ensureCopyButtonsForBlocks();
+        runtime.testing.ensureCopyButtonsForBlocks();
+        assert.equal(fixture.toolCount('tm-post-copy-tool-button'), 1, String(shareLabel));
+        assert.equal(fixture.toolCount('tm-post-link-tool-button'), 1, String(shareLabel));
+        for (const svg of fixture.svgs.slice(0, 3)) assert.equal(runtime.testing.isShareSvg(svg), false);
+    }
+});
+
+test('rounded glyph recognition retains geometry and ownership checks and rejects different shapes', async () => {
+    for (const overrides of [
+        { includePostIdentity: false },
+        { actionSlotSize: 100 },
+        { actionPaths: ['', '', '', THREADS_ROUNDED_SHARE_GLYPH_TEST_PATH.replace('M7.247', 'M7.267')] }
+    ]) {
+        const fixture = createThreadsActionFixture({
+            actionLabels: ['いいね', '返信', '再投稿', 'シェアする'],
+            actionPaths: ['', '', '', THREADS_ROUNDED_SHARE_GLYPH_TEST_PATH],
+            ...overrides
+        });
+        const runtime = await createThreadsRuntime({
+            platform: fakePlatform(), document: fixture.document, window: fixture.window, initialOptions: {}
+        });
+        assert.equal(runtime.testing.isShareSvg(fixture.svgs[3]), false);
+        runtime.testing.ensureCopyButtonsForBlocks();
+        assert.equal(fixture.toolCount('tm-post-copy-tool-button'), 0);
+    }
+});
+
 test('the four page features can be enabled independently', async (t) => {
     const previousLocation = globalThis.location;
     globalThis.location = { href: 'https://www.threads.com/@author/post/POST_1' };
@@ -940,8 +990,14 @@ test('live option changes remove disabled controls and rebuild only re-enabled c
         }
     });
 
+    let menu;
+    const writes = [];
     const runtime = await createThreadsRuntime({
-        platform: fakePlatform(),
+        platform: {
+            ...fakePlatform(),
+            async installSettingsUi(model) { menu = model; return () => {}; },
+            async saveOptions(options, details) { writes.push({ options, details }); return true; }
+        },
         captureSource: null,
         document: fixture.document,
         window: fixture.window,
@@ -957,6 +1013,12 @@ test('live option changes remove disabled controls and rebuild only re-enabled c
         'tm-post-media-tool-button'
     ]);
     assert.equal(fixture.document.body.children.some((node) => node.className === 'tm-target-download-button'), true);
+
+    menu.commands.find((command) => command.label.includes('複製本文')).run();
+    assert.deepEqual(writes.at(-1).details.changedKeys, ['enableCopyPostText']);
+    assert.equal(writes.at(-1).options.enableCopyPostText, false);
+    await runtime.updateOptions({ enableCopyPostText: true });
+    assert.ok(menu.commands.some((command) => command.label.includes('複製本文') && command.label.includes('開啟')));
 
     await runtime.updateOptions({
         enableCopyOriginalLink: false,

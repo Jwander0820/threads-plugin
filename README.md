@@ -50,7 +50,7 @@ Chrome 擴充功能已於 Chrome Web Store 正式上線，可直接安裝並由 
 2. 使用貼文工具列開啟媒體選擇器，勾選需要的圖片或影片。
 3. 使用文字或連結按鈕複製貼文內容與乾淨連結。
 
-四項頁面功能可以獨立啟用。Chrome 擴充功能請從設定頁調整；Tampermonkey 版請從腳本管理器的 Threads Plugin 選單切換。變更會套用到目前已開啟的 Threads 頁面，不需要重新載入。
+四項頁面功能可以獨立啟用。Chrome 擴充功能請從設定頁調整；Tampermonkey 版請從腳本管理器的 Threads Plugin 選單切換。目前分頁立即套用變更；Tampermonkey 其他已開啟分頁在切回時同步設定，不需要重新載入。
 
 Chrome 擴充功能預設跟隨 Threads 語言，也可在設定頁手動選擇繁體中文或英文。
 

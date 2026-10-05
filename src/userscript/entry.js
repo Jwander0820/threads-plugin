@@ -18,7 +18,14 @@ export async function bootstrapUserscript(environment = globalThis) {
         message: createUserscriptMessage(environment.navigator)
     });
     await runtime.start();
-    return runtime;
+    const unsubscribeOptions = platform.subscribeOptions((options) => runtime.updateOptions(options));
+    return Object.freeze({
+        ...runtime,
+        async stop() {
+            unsubscribeOptions();
+            return runtime.stop();
+        }
+    });
 }
 
 if (!IS_NODE_RUNTIME) {

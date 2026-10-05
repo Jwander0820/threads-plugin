@@ -1,5 +1,5 @@
 import { test, expect, acceptDisclosure } from './extension-fixtures.mjs';
-import { MIXED_PATH, REPLY_PATH, NEXT_PATH, EMPTY_PATH, UNRESOLVED_PATH, ORIGIN, REPLY_TEXT } from './threads-fixture.mjs';
+import { MIXED_PATH, REPLY_PATH, NEXT_PATH, EMPTY_PATH, UNRESOLVED_PATH, JAPANESE_PATH, JAPANESE_TEXT, MUSIC_PATH, MUSIC_TEXT, ORIGIN, REPLY_TEXT } from './threads-fixture.mjs';
 
 const modalSelector = '#tm-post-media-modal';
 
@@ -84,6 +84,264 @@ test('reply detail tools copy only the addressed reply and exclude parent media'
     await expect(page.locator(`${modalSelector} .tm-item`)).toHaveCount(1);
     await expect(page.locator(`${modalSelector} .tm-item img`)).toHaveAttribute('src', /reply-only\.jpg/);
     await expect(page.locator(`${modalSelector} .tm-modal-subtitle`)).toContainText('REPLY456');
+});
+
+test('Japanese native rounded share icon supports unique copy, link and media tools', async ({ page }) => {
+    await acceptDisclosure(page, JAPANESE_PATH);
+    await expect(page.getByRole('button', { name: 'シェアする', exact: true })).toBeVisible();
+    const post = page.locator('#japanese-post');
+    for (const tool of ['.tm-post-copy-tool-button', '.tm-post-link-tool-button', '.tm-post-media-tool-button']) {
+        await expect(post.locator(tool)).toHaveCount(1);
+    }
+    await post.locator('.tm-post-copy-tool-button').click();
+    await expect.poll(async () => (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n')).toBe(JAPANESE_TEXT);
+    await post.locator('.tm-post-link-tool-button').click();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`${ORIGIN}${JAPANESE_PATH}`);
+    await post.locator('.tm-post-media-tool-button').click();
+    await expect(page.locator(`${modalSelector} .tm-item`)).toHaveCount(1);
+    await page.keyboard.press('Escape');
+    await expect(post.locator('.tm-post-copy-tool-button')).toHaveCount(1);
+});
+
+test('copy excludes scrolled music attachment lyrics and mixed ancestors in every supported page language', async ({ page }) => {
+    await acceptDisclosure(page, MUSIC_PATH);
+    const post = page.locator('#music-post');
+    const control = post.locator('.music-control');
+    const firstLyric = post.locator('.music-lyrics [dir="auto"]').first();
+    expect((await firstLyric.boundingBox()).y).toBeLessThan((await control.boundingBox()).y);
+    for (const [lang, label] of [
+        ['zh-Hant', '播放音樂'], ['zh-Hant', '暫停音樂'],
+        ['en', 'Play music'], ['en', 'Pause music'],
+        ['ja', '音楽を再生'], ['ja', '音楽を一時停止']
+    ]) {
+        await page.evaluate(({ lang, label }) => {
+            document.documentElement.lang = lang;
+            document.querySelector('.music-control').setAttribute('aria-label', label);
+        }, { lang, label });
+        for (const ancestorHasDir of [false, true]) {
+            await post.locator('.music-post-content').evaluate((node, enabled) => {
+                if (enabled) node.setAttribute('dir', 'auto');
+                else node.removeAttribute('dir');
+            }, ancestorHasDir);
+            await page.evaluate(() => navigator.clipboard.writeText('copy-music-sentinel'));
+            await expect(post.locator('.tm-post-copy-tool-button')).toHaveCount(1);
+            await post.locator('.tm-post-copy-tool-button').click();
+            await expect.poll(async () => (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n')).toBe(MUSIC_TEXT);
+        }
+    }
+});
+
+test('a shared music wrapper retains direct caption text and inline author markup', async ({ page }) => {
+    await acceptDisclosure(page, MUSIC_PATH);
+    const post = page.locator('#music-post');
+    for (const inlineMarkup of [false, true]) {
+        await post.locator('.music-post-content').evaluate((node, { text, inlineMarkup }) => {
+            const card = node.querySelector('.music-card');
+            node.setAttribute('dir', 'auto');
+            node.style.whiteSpace = 'pre-wrap';
+            const captionNodes = [];
+            if (inlineMarkup) {
+                const [before, after] = text.split('Play music');
+                const link = document.createElement('a');
+                link.href = 'https://example.com/artist';
+                link.textContent = 'Play music';
+                captionNodes.push(document.createTextNode(before), link, document.createTextNode(after));
+            } else {
+                captionNodes.push(document.createTextNode(text));
+            }
+            node.replaceChildren(...captionNodes, card);
+        }, { text: MUSIC_TEXT, inlineMarkup });
+        await page.evaluate(() => navigator.clipboard.writeText('direct-caption-sentinel'));
+        await post.locator('.tm-post-copy-tool-button').click();
+        await expect.poll(async () => (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n')).toBe(MUSIC_TEXT);
+    }
+});
+
+test('copy preserves body words and fractions while removing actual translation controls', async ({ page }) => {
+    await acceptDisclosure(page, MIXED_PATH);
+    const body = '我最喜歡的工作是翻譯\n今年目標完成比例\n3/4';
+    await page.locator('#mixed-post p[dir="auto"]').evaluate((element, text) => {
+        element.textContent = text;
+        const translate = document.createElement('button');
+        translate.type = 'button';
+        translate.textContent = '翻譯';
+        // Threads can place its control inline with the last body line.
+        element.append(' ', translate);
+    }, body);
+    await page.locator('#mixed-post .tm-post-copy-tool-button').click();
+    await expect.poll(async () => (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n')).toBe(body);
+    await page.locator('#mixed-post p[dir="auto"] button').evaluate((element) => element.remove());
+    await page.locator('#mixed-post .tm-post-copy-tool-button').click();
+    await expect.poll(async () => (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n')).toBe(body);
+});
+
+test('long post and reply copy exclude the split static page badge while preserving body fractions', async ({ page }) => {
+    test.setTimeout(120000);
+    await acceptDisclosure(page, MIXED_PATH);
+    for (const fixture of [
+        { path: MIXED_PATH, root: '#mixed-post', current: 1, total: 2, title: '主貼文' },
+        { path: REPLY_PATH, root: '#reply-post', current: 2, total: 2, title: '回覆' },
+        { path: MIXED_PATH, root: '#mixed-post', current: 1, total: 3, title: '主貼文' },
+        { path: MIXED_PATH, root: '#mixed-post', current: 1, total: 14, title: '主貼文' },
+        { path: REPLY_PATH, root: '#reply-post', current: 14, total: 14, title: '續篇' },
+        { path: MIXED_PATH, root: '#mixed-post', current: 1, total: 20, title: '主貼文' },
+        { path: REPLY_PATH, root: '#reply-post', current: 10, total: 20, title: '續篇' },
+        { path: REPLY_PATH, root: '#reply-post', current: 20, total: 20, title: '續篇' },
+        { path: MIXED_PATH, root: '#mixed-post', current: 1, total: 31, title: '主貼文' },
+        { path: REPLY_PATH, root: '#reply-post', current: 15, total: 31, title: '續篇' },
+        { path: REPLY_PATH, root: '#reply-post', current: 31, total: 31, title: '續篇' }
+    ]) {
+        await test.step(`${fixture.title} ${fixture.current}/${fixture.total}`, async () => {
+            // Each case needs the original body element, which the previous case replaced.
+            await page.goto(`${ORIGIN}${fixture.path}`);
+            const body = [
+                `${fixture.title}第一段：保留完整正文。`,
+                ...Array.from({ length: 12 }, (_, index) => `長篇第 ${index + 1} 段：保留原有段落與換行。`),
+                '我最喜歡的工作是翻譯',
+                '今年目標完成比例',
+                '3/4',
+                '分行分數也屬於正文',
+                '3',
+                '/',
+                '4'
+            ].join('\n');
+            const post = page.locator(fixture.root);
+            const expectCopiedBody = async (expected) => {
+                // Equal body text across UI variants must still require a new clipboard write.
+                await page.evaluate(() => navigator.clipboard.writeText('clipboard fixture reset'));
+                await post.locator('.tm-post-copy-tool-button').click();
+                await expect.poll(async () => (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n')).toBe(expected);
+            };
+            await post.locator('p[dir="auto"]').evaluate((element, { body, current, total }) => {
+                // The live long-text badge has no media dependency or absolute positioning.
+                element.closest('article').querySelectorAll('.carousel, img, video').forEach(node => node.remove());
+                const parent = document.createElement('div');
+                parent.style.position = 'relative';
+                const text = document.createElement('span');
+                text.dir = 'auto';
+                text.dataset.fixtureLongBody = '1';
+                Object.assign(text.style, { display: 'block', whiteSpace: 'pre-wrap' });
+                text.textContent = body;
+                const wrapper = document.createElement('div');
+                wrapper.dataset.fixturePageBadge = '1';
+                wrapper.style.display = 'inline-block';
+                const badge = document.createElement('div');
+                Object.assign(badge.style, {
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    backgroundColor: 'rgb(30, 30, 30)', color: 'white', borderRadius: '12px',
+                    width: 'max-content', height: '23.8px', padding: '0 6px', position: 'static', fontSize: '12px'
+                });
+                const pageNumber = document.createElement('span');
+                pageNumber.textContent = String(current);
+                const slashContainer = document.createElement('div');
+                const slash = document.createElement('span');
+                slash.textContent = '/';
+                slashContainer.appendChild(slash);
+                const totalNumber = document.createElement('span');
+                totalNumber.textContent = String(total);
+                badge.append(pageNumber, slashContainer, totalNumber);
+                wrapper.appendChild(badge);
+                text.appendChild(wrapper);
+                parent.appendChild(text);
+                element.replaceWith(parent);
+            }, { body, current: fixture.current, total: fixture.total });
+            await expect(post.locator('[data-fixture-page-badge] > div')).toHaveCSS('position', 'static');
+            await expect(post.locator('[data-fixture-page-badge]')).toHaveCSS('display', 'inline-block');
+            await expect(post.locator('[data-fixture-page-badge]')).toHaveText(`${fixture.current}/${fixture.total}`);
+            await expect(post.locator('.tm-post-copy-tool-button')).toHaveCount(1);
+            await expectCopiedBody(body);
+
+            for (const label of ['翻譯', 'Translate', '翻訳']) {
+                await post.locator('[data-fixture-long-body]').evaluate((element, label) => {
+                    const button = document.createElement('button');
+                    button.dataset.fixtureTranslation = '1';
+                    button.textContent = label;
+                    Object.assign(button.style, { display: 'block', height: '24px' });
+                    element.appendChild(button);
+                }, label);
+                await expectCopiedBody(body);
+                await post.locator('[data-fixture-translation]').evaluate(element => element.remove());
+            }
+
+            for (const label of ['翻譯', 'Translate', '翻訳']) {
+                await test.step(`inline translation before badge: ${label}`, async () => {
+                    await post.locator('[data-fixture-long-body]').evaluate((element, label) => {
+                        // Match live Threads: body -> inline wrapper/button/span -> NBSP -> page badge.
+                        const wrapper = document.createElement('div');
+                        wrapper.dataset.fixtureInlineTranslation = '1';
+                        wrapper.style.display = 'inline-block';
+                        const control = document.createElement('div');
+                        control.setAttribute('role', 'button');
+                        control.tabIndex = 0;
+                        control.style.display = 'inline-flex';
+                        const text = document.createElement('span');
+                        text.textContent = label;
+                        control.appendChild(text);
+                        wrapper.appendChild(control);
+                        const badge = element.querySelector('[data-fixture-page-badge]');
+                        element.insertBefore(wrapper, badge);
+                        element.insertBefore(document.createTextNode('\u00a0'), badge);
+                    }, label);
+                    const wrapper = post.locator('[data-fixture-inline-translation]');
+                    await expect(wrapper).toHaveCSS('display', 'inline-block');
+                    await expect(wrapper.locator('[role="button"][tabindex="0"]')).toHaveCSS('display', 'inline-flex');
+                    await expect(wrapper.locator('[role="button"] > span')).toHaveText(label);
+                    expect(await wrapper.evaluate(element => element.nextSibling.textContent)).toBe('\u00a0');
+                    const bottomGap = await wrapper.locator('[role="button"]').evaluate((control) => Math.abs(
+                        control.getBoundingClientRect().bottom -
+                        control.closest('[data-fixture-long-body]').getBoundingClientRect().bottom
+                    ));
+                    expect(bottomGap, 'Translation control remains at the body bottom beside the badge').toBeLessThanOrEqual(6);
+                    await expectCopiedBody(body);
+                    await wrapper.evaluate((element) => {
+                        element.nextSibling.remove();
+                        element.remove();
+                    });
+                    await expectCopiedBody(body);
+                });
+            }
+
+            await post.locator('[data-fixture-page-badge]').evaluate(element => element.remove());
+            await expectCopiedBody(body);
+
+            // Identical fraction text at the body end remains content when no UI badge exists.
+            const bodyWithoutUi = `${body}\n${fixture.current}/${fixture.total}`;
+            await post.locator('[data-fixture-long-body]').evaluate((element, text) => { element.textContent = text; }, bodyWithoutUi);
+            await expectCopiedBody(bodyWithoutUi);
+        });
+    }
+});
+
+test('options stay locked during delayed real storage reads and preserve the stored settings', async ({ context, extensionWorker }) => {
+    const initialOptions = {
+        enableCopyOriginalLink: true, enableCopyPostText: true,
+        enableBatchMediaDownload: false, enablePerMediaDownload: true,
+        hoverScanIntervalMs: 220, layoutRefreshIntervalMs: 350, backgroundScanIntervalMs: 8000,
+        ignoreHorizontalOnlyScroll: true, languagePreference: 'en'
+    };
+    await extensionWorker.evaluate(async (options) => chrome.storage.local.set({ options }), initialOptions);
+    const settings = await context.newPage();
+    await settings.addInitScript(() => {
+        const originalGet = chrome.storage.local.get.bind(chrome.storage.local);
+        const ready = new Promise((resolve) => { globalThis.releaseSettingsRead = resolve; });
+        // Delay only; all returned data still comes from Chrome's actual storage.
+        chrome.storage.local.get = async (...args) => { await ready; return originalGet(...args); };
+    });
+    const extensionId = new URL(extensionWorker.url()).host;
+    await settings.goto(`chrome-extension://${extensionId}/options.html`);
+    await expect(settings.locator('#options-form button[type="submit"]')).toBeDisabled();
+    await expect(settings.locator('#enable-copy-post-text')).toBeDisabled();
+    await expect(settings.locator('#enable-page-processing')).toBeDisabled();
+    await settings.evaluate(() => document.getElementById('options-form').dispatchEvent(new Event('submit', { cancelable: true })));
+    expect(await extensionWorker.evaluate(async () => (await chrome.storage.local.get('options')).options)).toEqual(initialOptions);
+    await settings.evaluate(() => globalThis.releaseSettingsRead());
+    await expect(settings.locator('#options-form button[type="submit"]')).toBeEnabled();
+    await expect(settings.locator('#hover-scan-interval')).toHaveValue('220');
+    await expect(settings.locator('#enable-batch-media-download')).not.toBeChecked();
+    await settings.locator('#enable-copy-post-text').uncheck();
+    await settings.locator('#options-form button[type="submit"]').click();
+    await expect.poll(() => extensionWorker.evaluate(async () => (await chrome.storage.local.get('options')).options.enableCopyPostText)).toBe(false);
+    expect(await extensionWorker.evaluate(async () => (await chrome.storage.local.get('options')).options.hoverScanIntervalMs)).toBe(220);
 });
 
 test('SPA transitions clear stale media, stop on sensitive routes, and resume with one tool per action', async ({ page }) => {

@@ -1,25 +1,71 @@
+import { DEFAULT_OPTIONS, normalizeOptions } from '../shared/options.js';
+
 const OPTIONS_KEY = 'threads-media-downloader-options-v1';
+const OPTION_VALUE_PREFIX = 'threads-media-downloader-option-v2:';
+const OPTION_KEYS = Object.keys(DEFAULT_OPTIONS);
 
 export function createUserscriptPlatformAdapter(environment = globalThis) {
     let disposeSettings = () => {};
+    let lastOptions;
+
+    function readOptions() {
+        if (typeof environment.GM_getValue !== 'function') return null;
+        const options = { ...normalizeOptions(environment.GM_getValue(OPTIONS_KEY, null)) };
+        for (const key of OPTION_KEYS) {
+            const value = environment.GM_getValue(OPTION_VALUE_PREFIX + key, undefined);
+            if (value !== undefined) options[key] = value;
+        }
+        return normalizeOptions(options);
+    }
 
     return {
         async loadOptions() {
             try {
-                return typeof environment.GM_getValue === 'function'
-                    ? environment.GM_getValue(OPTIONS_KEY, null)
-                    : null;
+                lastOptions = readOptions();
+                return lastOptions;
             } catch {
                 return null;
             }
         },
-        async saveOptions(options) {
+        async saveOptions(options, { changedKeys } = {}) {
             if (typeof environment.GM_setValue !== 'function') return false;
-            environment.GM_setValue(OPTIONS_KEY, JSON.stringify(options));
+            const normalized = normalizeOptions(options);
+            // Separate keys prevent different tabs' edits from overwriting each
+            // other, including concurrent edits. The old snapshot is read-only
+            // migration input until each option has its own stored value.
+            const keys = changedKeys || OPTION_KEYS;
+            for (const key of keys) {
+                if (Object.hasOwn(DEFAULT_OPTIONS, key)) {
+                    environment.GM_setValue(OPTION_VALUE_PREFIX + key, normalized[key]);
+                }
+            }
             return true;
         },
-        subscribeOptions() {
-            return () => {};
+        subscribeOptions(listener) {
+            const window = environment.window || environment;
+            const document = environment.document;
+            let disposed = false;
+            const refresh = () => {
+                if (disposed || document?.visibilityState === 'hidden') return;
+                try {
+                    const next = readOptions();
+                    if (!next || JSON.stringify(next) === JSON.stringify(lastOptions)) return;
+                    lastOptions = next;
+                    Promise.resolve(listener(next)).catch((error) => {
+                        environment.console?.warn?.('[Threads Plugin] Updating settings failed', error);
+                    });
+                } catch (error) {
+                    environment.console?.warn?.('[Threads Plugin] Reading settings failed', error);
+                }
+            };
+            window.addEventListener?.('focus', refresh);
+            document?.addEventListener?.('visibilitychange', refresh);
+            return () => {
+                if (disposed) return;
+                disposed = true;
+                window.removeEventListener?.('focus', refresh);
+                document?.removeEventListener?.('visibilitychange', refresh);
+            };
         },
         downloadMedia(details) {
             if (typeof environment.GM_download !== 'function') throw new Error('unsupported');

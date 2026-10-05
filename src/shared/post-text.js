@@ -33,25 +33,60 @@ function getTrailingInlineUiLabels(element, renderedText = getRenderedText(eleme
             rect.height > 0 &&
             rect.height <= 48 &&
             Math.abs(rect.bottom - elementRect.bottom) <= 6 &&
-            new RegExp(`(?:^|\\n)[ \\t\\u00a0]*${escapeRegExp(label)}[ \\t\\u00a0]*$`).test(renderedText)
+            new RegExp(`${escapeRegExp(label)}[ \\t\\u00a0]*$`).test(renderedText)
         )
         .map(({ label }) => label);
 }
 
-function stripTrailingCarouselCounter(text) {
-    let output = String(text || '');
-    const counterPatterns = [
-        /\n[ \t\u00a0]*\d+[ \t\u00a0]*\n[ \t\u00a0]*\/[ \t\u00a0]*\n[ \t\u00a0]*\d+[ \t\u00a0]*$/,
-        /\n[ \t\u00a0]*\d+[ \t\u00a0]*\/[ \t\u00a0]*\d+[ \t\u00a0]*$/
-    ];
+function isThreadProgressBadge(element, window) {
+    const label = getRenderedText(element).trim();
+    const numbers = label.match(/^(\d+)\s*\/\s*(\d+)$/);
+    if (!numbers || Number(numbers[1]) < 1 || Number(numbers[1]) > Number(numbers[2])) return false;
 
-    counterPatterns.forEach((pattern) => {
-        output = output.replace(pattern, '');
-    });
+    // Threads appends a static, rounded flex badge to long post text. Its
+    // numerator, slash wrapper and denominator are separate DOM children;
+    // neither an ordinary body fraction nor a media overlay has this shape.
+    const parts = Array.from(element.children || []).map(child => getRenderedText(child).trim());
+    if (parts.length !== 3 || parts[0] !== numbers[1] || parts[1] !== '/' || parts[2] !== numbers[2]) return false;
+    if (element.querySelector?.('button,[role="button"],a,img,video,svg,time')) return false;
 
-    return output
-        .replace(/[ \t\u00a0]+$/g, '')
-        .replace(/\n+$/g, '');
+    const rect = element.getBoundingClientRect?.();
+    if (!rect || rect.width <= 0 || rect.width > 120 || rect.height <= 0 || rect.height > 48) return false;
+    const style = window?.getComputedStyle?.(element);
+    if (!style || !/^(?:inline-)?flex$/.test(style.display) || style.alignItems !== 'center') return false;
+    const background = String(style.backgroundColor || '').trim();
+    const transparent = /^(?:transparent|rgba\([^)]*,\s*0(?:\.0+)?\)|rgb\([^)]*\/\s*0(?:\.0+)?\))$/i;
+    return Boolean(background && !transparent.test(background) &&
+        parseFloat(style.borderRadius) >= rect.height / 4);
+}
+
+function isInsideThreadProgressBadge(element, window) {
+    // Also exclude independently selected [dir=auto] wrappers or badge parts,
+    // so candidate merging cannot add the counter back after body cleanup.
+    for (let node = element, depth = 0; node && depth < 4; node = node.parentElement, depth += 1) {
+        if (isThreadProgressBadge(node, window)) return true;
+    }
+    return false;
+}
+
+function getTrailingCounterUiLabels(element, renderedText, window) {
+    // Fractions require UI evidence: a thread progress badge or an actual,
+    // compact overlay on media. Never remove a plain-text fraction by itself.
+    return [element, ...Array.from(element?.querySelectorAll?.('div, span') || [])].filter((counter) => {
+        const label = getRenderedText(counter).trim();
+        if (!/^\d+\s*\/\s*\d+$/.test(label) || !renderedText.trimEnd().endsWith(label)) return false;
+        if (isThreadProgressBadge(counter, window)) return true;
+        if (window?.getComputedStyle?.(counter)?.position !== 'absolute') return false;
+        const rect = counter.getBoundingClientRect?.();
+        if (!rect || rect.width <= 0 || rect.width > 120 || rect.height <= 0 || rect.height > 64) return false;
+        const media = counter.parentElement?.querySelectorAll?.('img, video') || [];
+        return Array.from(media).some((item) => {
+            const mediaRect = item.getBoundingClientRect?.();
+            return mediaRect && mediaRect.width >= 96 && mediaRect.height >= 96 &&
+                rect.left >= mediaRect.left && rect.right <= mediaRect.right &&
+                rect.top >= mediaRect.top && rect.bottom <= mediaRect.bottom;
+        });
+    }).map((counter) => getRenderedText(counter).trim());
 }
 
 export function cleanPostTextFragment(text, trailingUiLabels = []) {
@@ -67,24 +102,25 @@ export function cleanPostTextFragment(text, trailingUiLabels = []) {
         );
     });
 
-    if (normalizedUiLabels.length === 0) {
-        output = output
-            .replace(/[ \t\u00a0]*(?:\n[ \t\u00a0]*)?(?:翻譯|查看翻譯)[ \t\u00a0]*$/i, '')
-            .replace(/[ \t\u00a0]*\n[ \t\u00a0]*(?:Translate|翻訳)[ \t\u00a0]*(?:\n[ \t\u00a0]*)*$/, '');
-    }
-
-    output = stripTrailingCarouselCounter(output);
-
     return output
         .replace(/[ \t\u00a0]+$/g, '')
         .replace(/^\n+|\n+$/g, '');
 }
 
-export function getRenderedPostText(element) {
+export function getRenderedPostText(element, window = globalThis.window) {
+    if (isInsideThreadProgressBadge(element, window)) return '';
     const renderedText = getRenderedText(element);
+    // Either UI can be last: peel a verified trailing counter first when present.
+    // Each UI type is removed once, so an identical body label/fraction survives.
+    const counterLabels = getTrailingCounterUiLabels(element, renderedText, window);
+    if (counterLabels.length > 0) {
+        const bodyText = cleanPostTextFragment(renderedText, counterLabels);
+        return cleanPostTextFragment(bodyText, getTrailingInlineUiLabels(element, bodyText));
+    }
+    const bodyText = cleanPostTextFragment(renderedText, getTrailingInlineUiLabels(element, renderedText));
     return cleanPostTextFragment(
-        renderedText,
-        getTrailingInlineUiLabels(element, renderedText)
+        bodyText,
+        getTrailingCounterUiLabels(element, bodyText, window)
     );
 }
 
@@ -96,10 +132,9 @@ function isThreadsMusicPlaybackControl(element) {
         /^(?:音楽を再生|音楽を一時停止)$/.test(label);
 }
 
-function getThreadsMusicAttachmentTop(root) {
+function getThreadsMusicAttachmentTop(root, attachments) {
     const rootRect = root.getBoundingClientRect();
-    return Array.from(root.querySelectorAll('[aria-label]'))
-        .filter(isThreadsMusicPlaybackControl)
+    return attachments
         .map((element) => element.getBoundingClientRect())
         .filter((rect) => Number.isFinite(rect.top) && rect.bottom > rootRect.top)
         .map((rect) => rect.top)
@@ -124,10 +159,36 @@ export function createPostTextExtractor({
     findBestPostInfoInNode,
     findPostInfoInNode
 }) {
-    function getPostBlockTextBoundary(root, actionBar) {
+    function getMusicAttachments(root) {
+        return Array.from(root.querySelectorAll('[aria-label]'))
+            .filter(isThreadsMusicPlaybackControl)
+            .filter((control) => !isInsideNestedPostBlock(control, root))
+            .map((control) => {
+                // The playback row and the clipped/scrolled lyrics are siblings
+                // in one card. Descendant rectangles can extend above that card,
+                // so screen position alone cannot identify attachment text.
+                for (let parent = control.parentElement; parent && parent !== root; parent = parent.parentElement) {
+                    if (!root.contains(parent)) break;
+                    const firstChild = parent.children?.[0];
+                    // Stop before a wrapper whose earlier branch holds caption
+                    // text or post metadata, even if that wrapper also clips.
+                    if (firstChild && !firstChild.contains(control)) break;
+                    if (Array.from(parent.childNodes || []).some(node => node.nodeType === 3 && node.textContent.trim())) break;
+                    const style = window?.getComputedStyle?.(parent);
+                    if (!parent.matches?.('button,[role=button]') &&
+                        [style?.overflow, style?.overflowX, style?.overflowY]
+                            .some(value => /^(?:hidden|clip)$/.test(value))) {
+                        return parent;
+                    }
+                }
+                return control;
+            });
+    }
+
+    function getPostBlockTextBoundary(root, actionBar, musicAttachments = getMusicAttachments(root)) {
         const rootRect = root.getBoundingClientRect();
         const actionTop = actionBar?.getBoundingClientRect?.().top;
-        const musicAttachmentTop = getThreadsMusicAttachmentTop(root);
+        const musicAttachmentTop = getThreadsMusicAttachmentTop(root, musicAttachments);
         const mediaTop = Array.from(root.querySelectorAll('img, video'))
             .filter(isDownloadableMedia)
             .map((element) => element.getBoundingClientRect())
@@ -201,9 +262,11 @@ export function createPostTextExtractor({
         return false;
     }
 
-    function isExcludedPostBlockTextElement(element, root, boundaryTop, postInfo) {
+    function isExcludedPostBlockTextElement(element, root, boundaryTop, postInfo, musicAttachments) {
         if (!element || !root.contains(element)) return true;
         if (isInsideNestedPostBlock(element, root)) return true;
+        if (musicAttachments.some(attachment => attachment.contains?.(element) ||
+            (isThreadsMusicPlaybackControl(attachment) && element.contains(attachment)))) return true;
         if (isPostHeaderMetadataTextElement(element, root)) return true;
         if (isInlinePostHeaderMetadataTextElement(element, root)) return true;
         if (element.closest(injectedUiSelector)) return true;
@@ -225,8 +288,13 @@ export function createPostTextExtractor({
             }
         }
 
-        if (element.querySelector('time, video')) return true;
+        const isOutsideMusicAttachment = node => !musicAttachments.some(attachment => attachment.contains?.(node));
+        // Music cards include an internal (often hidden) video. That media must
+        // not reject a shared wrapper before its caption branches are read.
+        if (element.querySelector('time, video') &&
+            (musicAttachments.length === 0 || Array.from(element.querySelectorAll('time, video')).some(isOutsideMusicAttachment))) return true;
         const containsPostMediaImage = Array.from(element.querySelectorAll('img'))
+            .filter(isOutsideMusicAttachment)
             .some((image) => {
                 const imageRect = image.getBoundingClientRect?.();
                 return Boolean(
@@ -249,8 +317,43 @@ export function createPostTextExtractor({
         return false;
     }
 
-    function scorePostBlockTextElement(element, root, boundaryTop) {
-        const text = getRenderedText(element);
+    function getPostBodyText(element, musicAttachments) {
+        if (!musicAttachments.some(attachment => element.contains(attachment))) {
+            return getRenderedPostText(element, window);
+        }
+
+        // A caption may be a direct text node or inline markup in the same
+        // wrapper as the card. Read only its non-attachment branches instead
+        // of dropping that whole wrapper or merging its full innerText later.
+        function readCaption(node) {
+            if (node.nodeType === 3) {
+                const text = String(node.textContent || '');
+                const whiteSpace = window.getComputedStyle(node.parentElement)?.whiteSpace;
+                return /^(?:normal|nowrap)$/.test(whiteSpace) ? text.replace(/\s+/g, ' ') : text;
+            }
+            if (musicAttachments.some(attachment => attachment.contains?.(node))) return '';
+            if (node.matches?.('button,[role=button],nav') || node.closest?.(injectedUiSelector)) return '';
+            if (!musicAttachments.some(attachment => node.contains?.(attachment))) {
+                return getRenderedPostText(node, window);
+            }
+
+            let text = '';
+            for (const child of Array.from(node.childNodes || node.children || [])) {
+                const fragment = readCaption(child);
+                if (!fragment) continue;
+                const display = child.nodeType === 1 ? window.getComputedStyle(child)?.display : '';
+                const block = /^(?:block|flow-root|flex|grid|list-item|table(?:-.+)?)$/.test(display);
+                if (block && text && !text.endsWith('\n')) text += '\n';
+                text += fragment;
+                if (block && !text.endsWith('\n')) text += '\n';
+            }
+            return text;
+        }
+
+        return cleanPostTextFragment(readCaption(element));
+    }
+
+    function scorePostBlockTextElement(element, root, boundaryTop, text) {
         const rect = element.getBoundingClientRect();
         const rootRect = root.getBoundingClientRect();
         const lineCount = text.split('\n').length;
@@ -274,17 +377,21 @@ export function createPostTextExtractor({
     function extractPostBlockText(root, actionBar) {
         if (!root) return '';
 
-        const boundaryTop = getPostBlockTextBoundary(root, actionBar);
+        const musicAttachments = getMusicAttachments(root);
+        const boundaryTop = getPostBlockTextBoundary(root, actionBar, musicAttachments);
         const postInfo = findBestPostInfoInNode(root, actionBar || root, true) ||
             findPostInfoInNode(root);
         const collectCandidates = (elements) => elements
-            .filter((element) => !isExcludedPostBlockTextElement(element, root, boundaryTop, postInfo))
-            .map((element) => ({
-                element,
-                text: getRenderedPostText(element),
-                rect: element.getBoundingClientRect(),
-                score: scorePostBlockTextElement(element, root, boundaryTop)
-            }))
+            .filter((element) => !isExcludedPostBlockTextElement(element, root, boundaryTop, postInfo, musicAttachments))
+            .map((element) => {
+                const text = getPostBodyText(element, musicAttachments);
+                return {
+                    element,
+                    text,
+                    rect: element.getBoundingClientRect(),
+                    score: scorePostBlockTextElement(element, root, boundaryTop, text)
+                };
+            })
             .filter((item) => item.text)
             .sort((a, b) => b.score - a.score);
         let candidates = collectCandidates(Array.from(root.querySelectorAll('[dir="auto"]')));
@@ -315,7 +422,7 @@ export function createPostTextExtractor({
             fragments.push(text);
         });
 
-        return stripTrailingCarouselCounter(fragments.join('\n'));
+        return fragments.join('\n');
     }
 
     return { extractPostBlockText, getPostBlockTextBoundary };

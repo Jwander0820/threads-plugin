@@ -33,15 +33,18 @@ export function consumeNetworkDisclosureConfirmation(dialog) {
 }
 
 
-if (!IS_NODE_RUNTIME) {
-const platform = createChromePlatformAdapter(globalThis);
+export async function bootstrapOptionsPage(environment = globalThis) {
+const { document, window } = environment;
+const platform = createChromePlatformAdapter(environment);
 const byId = (id) => document.getElementById(id);
-let message = (key, substitutions) => getExtensionMessage(key, substitutions);
+let message = (key, substitutions) => getExtensionMessage(key, substitutions, environment.chrome);
+let optionsReady = false;
+byId('options-controls').disabled = true;
 
 async function applyLocalization(languagePreference) {
     const localized = await localizeStoredDocument(
         document,
-        globalThis,
+        environment,
         languagePreference ? { languagePreference } : {}
     );
     message = localized.message;
@@ -75,20 +78,25 @@ function writeForm(options) {
     byId('ignore-horizontal-scroll').checked = normalized.ignoreHorizontalOnlyScroll;
 }
 
-async function refreshConsent() {
-    const consent = normalizeConsentState(await platform.loadConsent());
+function renderConsent(value) {
+    const consent = normalizeConsentState(value);
     const enabled = canProcessPage(consent);
     const status = byId('consent-status');
     status.textContent = message(enabled ? 'consentStatusEnabled' : 'consentStatusDisabled');
     status.classList.toggle('active', enabled);
-    byId('enable-page-processing').disabled = enabled;
-    byId('revoke-consent').disabled = !enabled;
-    byId('network-capture-enabled').disabled = !enabled;
+    byId('enable-page-processing').disabled = !optionsReady || enabled;
+    byId('revoke-consent').disabled = !optionsReady || !enabled;
+    byId('network-capture-enabled').disabled = !optionsReady || !enabled;
     byId('network-capture-enabled').checked = consent.networkCaptureEnabled;
+}
+
+async function refreshConsent() {
+    renderConsent(await platform.loadConsent());
 }
 
 byId('options-form').addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (!optionsReady) return;
     const options = await platform.saveOptions(readForm());
     await applyLocalization(options.languagePreference);
     const status = byId('save-status');
@@ -97,7 +105,7 @@ byId('options-form').addEventListener('submit', async (event) => {
 });
 
 byId('reset-options').addEventListener('click', async (event) => {
-    if (!event.isTrusted) return;
+    if (!optionsReady || !event.isTrusted) return;
     writeForm(DEFAULT_OPTIONS);
     await platform.saveOptions(DEFAULT_OPTIONS);
     await applyLocalization(DEFAULT_OPTIONS.languagePreference);
@@ -105,24 +113,24 @@ byId('reset-options').addEventListener('click', async (event) => {
 });
 
 byId('language-preference').addEventListener('change', async (event) => {
-    if (!event.isTrusted) return;
+    if (!optionsReady || !event.isTrusted) return;
     await applyLocalization(event.target.value);
 });
 
 byId('enable-page-processing').addEventListener('click', async (event) => {
-    if (!event.isTrusted) return;
+    if (!optionsReady || !event.isTrusted) return;
     await platform.saveConsent(acceptPageDisclosure());
     await refreshConsent();
 });
 
 byId('revoke-consent').addEventListener('click', async (event) => {
-    if (!event.isTrusted) return;
+    if (!optionsReady || !event.isTrusted) return;
     await platform.saveConsent(declineOrRevokeConsent());
     await refreshConsent();
 });
 
 byId('network-capture-enabled').addEventListener('change', async (event) => {
-    if (!event.isTrusted) return;
+    if (!optionsReady || !event.isTrusted) return;
     if (event.target.checked) {
         event.target.checked = false;
         openNetworkDisclosure(byId('network-disclosure'));
@@ -134,6 +142,7 @@ byId('network-capture-enabled').addEventListener('change', async (event) => {
 });
 
 byId('network-disclosure').addEventListener('close', async () => {
+    if (!optionsReady) return;
     const disclosure = byId('network-disclosure');
     if (!consumeNetworkDisclosureConfirmation(disclosure)) return;
     const consent = await platform.loadConsent();
@@ -142,15 +151,22 @@ byId('network-disclosure').addEventListener('close', async () => {
     byId('save-status').textContent = message('networkCaptureEnabledStatus');
 });
 
-async function bootstrapOptionsPage() {
+try {
     await applyLocalization();
-    await Promise.all([
-        platform.loadOptions().then(writeForm),
-        refreshConsent()
+    const [options, consent] = await Promise.all([
+        platform.loadOptions(),
+        platform.loadConsent()
     ]);
+    writeForm(options);
+    optionsReady = true;
+    renderConsent(consent);
+    byId('options-controls').disabled = false;
+} catch (error) {
+    byId('save-status').textContent = message('settingsLoadFailedStatus', [error.message]);
+    throw error;
+}
 }
 
-void bootstrapOptionsPage().catch((error) => {
-    byId('save-status').textContent = message('settingsLoadFailedStatus', [error.message]);
-});
+if (!IS_NODE_RUNTIME) {
+    void bootstrapOptionsPage().catch((error) => console.error('[Threads Plugin] Loading settings failed', error));
 }

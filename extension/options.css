@@ -8,7 +8,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; }
 main { width: min(760px, calc(100% - 32px)); margin: 48px auto; }
-header, section, form > .actions {
+header, section, #options-controls > .actions {
   background: rgba(255, 255, 255, .92);
   border: 1px solid rgba(20, 22, 28, .12);
   border-radius: 16px;
@@ -36,7 +36,9 @@ input[type="number"] { width: 100%; border: 1px solid #d5d0c7; border-radius: 10
 .select-field { display: grid; gap: 8px; color: #555; font-size: .82rem; font-weight: 700; }
 select { width: min(100%, 360px); border: 1px solid #d5d0c7; border-radius: 10px; padding: 10px 12px; background: #fff; color: #171717; font: inherit; }
 .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
-form > .actions { padding: 18px; }
+#options-controls { border: 0; padding: 0; margin: 0; min-width: 0; }
+#options-controls > .actions { padding: 18px; }
+button:disabled { cursor: default; opacity: .58; }
 button { border: 0; border-radius: 999px; padding: 11px 17px; background: #315fdb; color: white; font: inherit; font-weight: 750; cursor: pointer; }
 button.secondary { border: 1px solid #d5d0c7; background: transparent; color: #333; }
 button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid #4c7dff; outline-offset: 3px; }
@@ -49,7 +51,7 @@ dialog form { padding: 26px; }
 
 @media (prefers-color-scheme: dark) {
   :root { color: #f3f6fc; background: #0b0d12; }
-  header, section, form > .actions { background: #151923; border-color: #2b3241; }
+  header, section, #options-controls > .actions { background: #151923; border-color: #2b3241; }
   p, .grid label, .select-field { color: #b8b8b8; }
   .status { background: #322a23; color: #e3bd98; }
   input[type="number"] { background: #111; color: #eee; border-color: #444; }

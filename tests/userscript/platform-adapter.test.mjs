@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createUserscriptPlatformAdapter } from '../../src/userscript/platform-adapter.js';
+import { DEFAULT_OPTIONS } from '../../src/shared/options.js';
 
 test('userscript adapter presents asynchronous storage and capability interface', async () => {
     const writes = [];
     const environment = {
-        GM_getValue: () => '{"enableBatchMediaDownload":false}',
+        GM_getValue: (key, fallback) => key.endsWith('options-v1') ? '{"enableBatchMediaDownload":false}' : fallback,
         GM_setValue: (key, value) => writes.push([key, value]),
         GM_setClipboard: (text) => writes.push(['clipboard', text]),
         GM_addStyle: () => {},
@@ -14,14 +15,70 @@ test('userscript adapter presents asynchronous storage and capability interface'
         GM_unregisterMenuCommand: () => {}
     };
     const adapter = createUserscriptPlatformAdapter(environment);
-    assert.equal(await adapter.loadOptions(), '{"enableBatchMediaDownload":false}');
-    assert.equal(await adapter.saveOptions({ enableBatchMediaDownload: true }), true);
+    assert.equal((await adapter.loadOptions()).enableBatchMediaDownload, false);
+    assert.equal(await adapter.saveOptions({ enableBatchMediaDownload: true }, { changedKeys: ['enableBatchMediaDownload'] }), true);
     assert.equal(await adapter.writeClipboard('post text'), true);
     assert.deepEqual(Object.keys(adapter).sort(), [
         'downloadMedia', 'installSettingsUi', 'installStyles', 'loadOptions',
         'requestMedia', 'saveOptions', 'subscribeOptions', 'writeClipboard'
     ]);
     assert.equal(writes.length, 2);
+});
+
+test('different tabs retain each other\'s edits and migrate legacy options without a new grant', async () => {
+    const stored = new Map([['threads-media-downloader-options-v1', JSON.stringify({
+        enableBatchMediaDownload: true, enableCopyPostText: true, hoverScanIntervalMs: 220
+    })]]);
+    const environment = {
+        GM_getValue: (key, fallback) => stored.has(key) ? stored.get(key) : fallback,
+        GM_setValue: (key, value) => stored.set(key, value)
+    };
+    const first = createUserscriptPlatformAdapter(environment);
+    const second = createUserscriptPlatformAdapter(environment);
+    const initialFirst = await first.loadOptions();
+    const initialSecond = await second.loadOptions();
+    await Promise.all([
+        first.saveOptions({ ...initialFirst, enableBatchMediaDownload: false }, { changedKeys: ['enableBatchMediaDownload'] }),
+        second.saveOptions({ ...initialSecond, enableCopyPostText: false }, { changedKeys: ['enableCopyPostText'] })
+    ]);
+    const latest = await first.loadOptions();
+    assert.equal(latest.enableBatchMediaDownload, false);
+    assert.equal(latest.enableCopyPostText, false);
+    assert.equal(latest.hoverScanIntervalMs, 220);
+    await second.saveOptions(DEFAULT_OPTIONS);
+    assert.deepEqual(await first.loadOptions(), DEFAULT_OPTIONS);
+});
+
+test('returning to a userscript tab synchronizes options and disposal removes its listeners', async () => {
+    const stored = new Map();
+    const listeners = new Map();
+    const target = {
+        addEventListener: (name, handler) => listeners.set(name, handler),
+        removeEventListener: (name) => listeners.delete(name),
+        visibilityState: 'visible'
+    };
+    const environment = {
+        window: target, document: target,
+        GM_getValue: (key, fallback) => stored.has(key) ? stored.get(key) : fallback,
+        GM_setValue: (key, value) => stored.set(key, value)
+    };
+    const first = createUserscriptPlatformAdapter(environment);
+    const second = createUserscriptPlatformAdapter(environment);
+    await first.loadOptions();
+    const updates = [];
+    const dispose = first.subscribeOptions((options) => updates.push(options));
+    await second.saveOptions({ enableCopyPostText: false }, { changedKeys: ['enableCopyPostText'] });
+    target.visibilityState = 'hidden';
+    listeners.get('visibilitychange')();
+    assert.equal(updates.length, 0);
+    target.visibilityState = 'visible';
+    listeners.get('focus')();
+    listeners.get('visibilitychange')();
+    assert.equal(updates.length, 1);
+    assert.equal(updates[0].enableCopyPostText, false);
+    dispose();
+    dispose();
+    assert.equal(listeners.size, 0);
 });
 
 test('userscript style disposer removes the GM_addStyle node exactly once', async () => {

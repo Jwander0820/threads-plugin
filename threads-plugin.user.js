@@ -3,7 +3,7 @@
 // @name:zh-TW   Threads Plugin
 // @name:en      Threads Plugin
 // @namespace    https://github.com/Jwander0820
-// @version      5.3.0
+// @version      5.3.1
 // @description  Download images and videos from Threads posts, select media in batches, copy post text, and copy links with tracking parameters removed.
 // @description:zh-TW 為 Threads 貼文提供圖片與影片下載、批次資源選擇、貼文文字複製，以及去除追蹤碼的連結複製功能。
 // @description:en Download images and videos from Threads posts, select media in batches, copy post text, and copy links with tracking parameters removed.
@@ -468,19 +468,44 @@
       label: getRenderedText(control).trim(),
       rect: control.getBoundingClientRect?.()
     })).filter(
-      ({ label, rect }) => label && !label.includes("\n") && label.length <= 64 && rect && rect.width > 0 && rect.width <= 220 && rect.height > 0 && rect.height <= 48 && Math.abs(rect.bottom - elementRect.bottom) <= 6 && new RegExp(`(?:^|\\n)[ \\t\\u00a0]*${escapeRegExp(label)}[ \\t\\u00a0]*$`).test(renderedText)
+      ({ label, rect }) => label && !label.includes("\n") && label.length <= 64 && rect && rect.width > 0 && rect.width <= 220 && rect.height > 0 && rect.height <= 48 && Math.abs(rect.bottom - elementRect.bottom) <= 6 && new RegExp(`${escapeRegExp(label)}[ \\t\\u00a0]*$`).test(renderedText)
     ).map(({ label }) => label);
   }
-  function stripTrailingCarouselCounter(text) {
-    let output = String(text || "");
-    const counterPatterns = [
-      /\n[ \t\u00a0]*\d+[ \t\u00a0]*\n[ \t\u00a0]*\/[ \t\u00a0]*\n[ \t\u00a0]*\d+[ \t\u00a0]*$/,
-      /\n[ \t\u00a0]*\d+[ \t\u00a0]*\/[ \t\u00a0]*\d+[ \t\u00a0]*$/
-    ];
-    counterPatterns.forEach((pattern) => {
-      output = output.replace(pattern, "");
-    });
-    return output.replace(/[ \t\u00a0]+$/g, "").replace(/\n+$/g, "");
+  function isThreadProgressBadge(element, window) {
+    const label = getRenderedText(element).trim();
+    const numbers = label.match(/^(\d+)\s*\/\s*(\d+)$/);
+    if (!numbers || Number(numbers[1]) < 1 || Number(numbers[1]) > Number(numbers[2])) return false;
+    const parts = Array.from(element.children || []).map((child) => getRenderedText(child).trim());
+    if (parts.length !== 3 || parts[0] !== numbers[1] || parts[1] !== "/" || parts[2] !== numbers[2]) return false;
+    if (element.querySelector?.('button,[role="button"],a,img,video,svg,time')) return false;
+    const rect = element.getBoundingClientRect?.();
+    if (!rect || rect.width <= 0 || rect.width > 120 || rect.height <= 0 || rect.height > 48) return false;
+    const style = window?.getComputedStyle?.(element);
+    if (!style || !/^(?:inline-)?flex$/.test(style.display) || style.alignItems !== "center") return false;
+    const background = String(style.backgroundColor || "").trim();
+    const transparent = /^(?:transparent|rgba\([^)]*,\s*0(?:\.0+)?\)|rgb\([^)]*\/\s*0(?:\.0+)?\))$/i;
+    return Boolean(background && !transparent.test(background) && parseFloat(style.borderRadius) >= rect.height / 4);
+  }
+  function isInsideThreadProgressBadge(element, window) {
+    for (let node = element, depth = 0; node && depth < 4; node = node.parentElement, depth += 1) {
+      if (isThreadProgressBadge(node, window)) return true;
+    }
+    return false;
+  }
+  function getTrailingCounterUiLabels(element, renderedText, window) {
+    return [element, ...Array.from(element?.querySelectorAll?.("div, span") || [])].filter((counter) => {
+      const label = getRenderedText(counter).trim();
+      if (!/^\d+\s*\/\s*\d+$/.test(label) || !renderedText.trimEnd().endsWith(label)) return false;
+      if (isThreadProgressBadge(counter, window)) return true;
+      if (window?.getComputedStyle?.(counter)?.position !== "absolute") return false;
+      const rect = counter.getBoundingClientRect?.();
+      if (!rect || rect.width <= 0 || rect.width > 120 || rect.height <= 0 || rect.height > 64) return false;
+      const media = counter.parentElement?.querySelectorAll?.("img, video") || [];
+      return Array.from(media).some((item) => {
+        const mediaRect = item.getBoundingClientRect?.();
+        return mediaRect && mediaRect.width >= 96 && mediaRect.height >= 96 && rect.left >= mediaRect.left && rect.right <= mediaRect.right && rect.top >= mediaRect.top && rect.bottom <= mediaRect.bottom;
+      });
+    }).map((counter) => getRenderedText(counter).trim());
   }
   function cleanPostTextFragment(text, trailingUiLabels = []) {
     let output = String(text || "").replace(/\r\n?/g, "\n");
@@ -493,17 +518,20 @@
         ""
       );
     });
-    if (normalizedUiLabels.length === 0) {
-      output = output.replace(/[ \t\u00a0]*(?:\n[ \t\u00a0]*)?(?:翻譯|查看翻譯)[ \t\u00a0]*$/i, "").replace(/[ \t\u00a0]*\n[ \t\u00a0]*(?:Translate|翻訳)[ \t\u00a0]*(?:\n[ \t\u00a0]*)*$/, "");
-    }
-    output = stripTrailingCarouselCounter(output);
     return output.replace(/[ \t\u00a0]+$/g, "").replace(/^\n+|\n+$/g, "");
   }
-  function getRenderedPostText(element) {
+  function getRenderedPostText(element, window = globalThis.window) {
+    if (isInsideThreadProgressBadge(element, window)) return "";
     const renderedText = getRenderedText(element);
+    const counterLabels = getTrailingCounterUiLabels(element, renderedText, window);
+    if (counterLabels.length > 0) {
+      const bodyText2 = cleanPostTextFragment(renderedText, counterLabels);
+      return cleanPostTextFragment(bodyText2, getTrailingInlineUiLabels(element, bodyText2));
+    }
+    const bodyText = cleanPostTextFragment(renderedText, getTrailingInlineUiLabels(element, renderedText));
     return cleanPostTextFragment(
-      renderedText,
-      getTrailingInlineUiLabels(element, renderedText)
+      bodyText,
+      getTrailingCounterUiLabels(element, bodyText, window)
     );
   }
   function isThreadsMusicPlaybackControl(element) {
@@ -511,9 +539,9 @@
     const label = String(element.getAttribute?.("aria-label") || "").trim();
     return /^(?:播放|暫停|暂停)音[樂乐]$/.test(label) || /^(?:play|pause)\s+music$/i.test(label) || /^(?:音楽を再生|音楽を一時停止)$/.test(label);
   }
-  function getThreadsMusicAttachmentTop(root) {
+  function getThreadsMusicAttachmentTop(root, attachments) {
     const rootRect = root.getBoundingClientRect();
-    return Array.from(root.querySelectorAll("[aria-label]")).filter(isThreadsMusicPlaybackControl).map((element) => element.getBoundingClientRect()).filter((rect) => Number.isFinite(rect.top) && rect.bottom > rootRect.top).map((rect) => rect.top).filter((top) => top >= rootRect.top).sort((a, b) => a - b)[0];
+    return attachments.map((element) => element.getBoundingClientRect()).filter((rect) => Number.isFinite(rect.top) && rect.bottom > rootRect.top).map((rect) => rect.top).filter((top) => top >= rootRect.top).sort((a, b) => a - b)[0];
   }
   function isVisibleTextRect(rect) {
     return rect.width > 0 && rect.height > 0;
@@ -527,10 +555,25 @@
     findBestPostInfoInNode,
     findPostInfoInNode
   }) {
-    function getPostBlockTextBoundary(root, actionBar) {
+    function getMusicAttachments(root) {
+      return Array.from(root.querySelectorAll("[aria-label]")).filter(isThreadsMusicPlaybackControl).filter((control) => !isInsideNestedPostBlock(control, root)).map((control) => {
+        for (let parent = control.parentElement; parent && parent !== root; parent = parent.parentElement) {
+          if (!root.contains(parent)) break;
+          const firstChild = parent.children?.[0];
+          if (firstChild && !firstChild.contains(control)) break;
+          if (Array.from(parent.childNodes || []).some((node) => node.nodeType === 3 && node.textContent.trim())) break;
+          const style = window?.getComputedStyle?.(parent);
+          if (!parent.matches?.("button,[role=button]") && [style?.overflow, style?.overflowX, style?.overflowY].some((value) => /^(?:hidden|clip)$/.test(value))) {
+            return parent;
+          }
+        }
+        return control;
+      });
+    }
+    function getPostBlockTextBoundary(root, actionBar, musicAttachments = getMusicAttachments(root)) {
       const rootRect = root.getBoundingClientRect();
       const actionTop = actionBar?.getBoundingClientRect?.().top;
-      const musicAttachmentTop = getThreadsMusicAttachmentTop(root);
+      const musicAttachmentTop = getThreadsMusicAttachmentTop(root, musicAttachments);
       const mediaTop = Array.from(root.querySelectorAll("img, video")).filter(isDownloadableMedia).map((element) => element.getBoundingClientRect()).filter((rect) => rect.width >= minMediaSize && rect.height >= minMediaSize).map((rect) => rect.top).filter((top) => top >= rootRect.top).sort((a, b) => a - b)[0];
       return Math.min(
         Number.isFinite(mediaTop) ? mediaTop : Infinity,
@@ -578,9 +621,10 @@
       }
       return false;
     }
-    function isExcludedPostBlockTextElement(element, root, boundaryTop, postInfo) {
+    function isExcludedPostBlockTextElement(element, root, boundaryTop, postInfo, musicAttachments) {
       if (!element || !root.contains(element)) return true;
       if (isInsideNestedPostBlock(element, root)) return true;
+      if (musicAttachments.some((attachment) => attachment.contains?.(element) || isThreadsMusicPlaybackControl(attachment) && element.contains(attachment))) return true;
       if (isPostHeaderMetadataTextElement(element, root)) return true;
       if (isInlinePostHeaderMetadataTextElement(element, root)) return true;
       if (element.closest(injectedUiSelector)) return true;
@@ -599,8 +643,9 @@
           return true;
         }
       }
-      if (element.querySelector("time, video")) return true;
-      const containsPostMediaImage = Array.from(element.querySelectorAll("img")).some((image) => {
+      const isOutsideMusicAttachment = (node) => !musicAttachments.some((attachment) => attachment.contains?.(node));
+      if (element.querySelector("time, video") && (musicAttachments.length === 0 || Array.from(element.querySelectorAll("time, video")).some(isOutsideMusicAttachment))) return true;
+      const containsPostMediaImage = Array.from(element.querySelectorAll("img")).filter(isOutsideMusicAttachment).some((image) => {
         const imageRect = image.getBoundingClientRect?.();
         return Boolean(
           imageRect && imageRect.width >= minMediaSize && imageRect.height >= minMediaSize
@@ -616,8 +661,36 @@
       if (/^\d+\s*(秒|分鐘?|分|小時|天|週|周|個月|月|年)\s*$/.test(text)) return true;
       return false;
     }
-    function scorePostBlockTextElement(element, root, boundaryTop) {
-      const text = getRenderedText(element);
+    function getPostBodyText(element, musicAttachments) {
+      if (!musicAttachments.some((attachment) => element.contains(attachment))) {
+        return getRenderedPostText(element, window);
+      }
+      function readCaption(node) {
+        if (node.nodeType === 3) {
+          const text2 = String(node.textContent || "");
+          const whiteSpace = window.getComputedStyle(node.parentElement)?.whiteSpace;
+          return /^(?:normal|nowrap)$/.test(whiteSpace) ? text2.replace(/\s+/g, " ") : text2;
+        }
+        if (musicAttachments.some((attachment) => attachment.contains?.(node))) return "";
+        if (node.matches?.("button,[role=button],nav") || node.closest?.(injectedUiSelector)) return "";
+        if (!musicAttachments.some((attachment) => node.contains?.(attachment))) {
+          return getRenderedPostText(node, window);
+        }
+        let text = "";
+        for (const child of Array.from(node.childNodes || node.children || [])) {
+          const fragment = readCaption(child);
+          if (!fragment) continue;
+          const display = child.nodeType === 1 ? window.getComputedStyle(child)?.display : "";
+          const block = /^(?:block|flow-root|flex|grid|list-item|table(?:-.+)?)$/.test(display);
+          if (block && text && !text.endsWith("\n")) text += "\n";
+          text += fragment;
+          if (block && !text.endsWith("\n")) text += "\n";
+        }
+        return text;
+      }
+      return cleanPostTextFragment(readCaption(element));
+    }
+    function scorePostBlockTextElement(element, root, boundaryTop, text) {
       const rect = element.getBoundingClientRect();
       const rootRect = root.getBoundingClientRect();
       const lineCount = text.split("\n").length;
@@ -636,14 +709,18 @@
     }
     function extractPostBlockText(root, actionBar) {
       if (!root) return "";
-      const boundaryTop = getPostBlockTextBoundary(root, actionBar);
+      const musicAttachments = getMusicAttachments(root);
+      const boundaryTop = getPostBlockTextBoundary(root, actionBar, musicAttachments);
       const postInfo = findBestPostInfoInNode(root, actionBar || root, true) || findPostInfoInNode(root);
-      const collectCandidates = (elements) => elements.filter((element) => !isExcludedPostBlockTextElement(element, root, boundaryTop, postInfo)).map((element) => ({
-        element,
-        text: getRenderedPostText(element),
-        rect: element.getBoundingClientRect(),
-        score: scorePostBlockTextElement(element, root, boundaryTop)
-      })).filter((item) => item.text).sort((a, b) => b.score - a.score);
+      const collectCandidates = (elements) => elements.filter((element) => !isExcludedPostBlockTextElement(element, root, boundaryTop, postInfo, musicAttachments)).map((element) => {
+        const text = getPostBodyText(element, musicAttachments);
+        return {
+          element,
+          text,
+          rect: element.getBoundingClientRect(),
+          score: scorePostBlockTextElement(element, root, boundaryTop, text)
+        };
+      }).filter((item) => item.text).sort((a, b) => b.score - a.score);
       let candidates = collectCandidates(Array.from(root.querySelectorAll('[dir="auto"]')));
       if (candidates.length === 0) {
         candidates = collectCandidates(Array.from(root.querySelectorAll("p, div, span")));
@@ -663,7 +740,7 @@
         }
         fragments.push(text);
       });
-      return stripTrailingCarouselCounter(fragments.join("\n"));
+      return fragments.join("\n");
     }
     return { extractPostBlockText, getPostBlockTextBoundary };
   }
@@ -1792,7 +1869,18 @@
     const CLEAN_LINK_MENU_CLASS = "tm-clean-link-menu-item";
     const POST_BOUNDARY_SELECTOR = 'article,[role="article"],[data-pressable-container]';
     const SHARE_SVG_CANDIDATE_SELECTOR = 'svg[aria-label],button svg,[role="button"] svg,a svg,[tabindex="0"] svg';
-    const THREADS_SHARE_GLYPH_PATH_PREFIX = "M7.2474 1.49853C4.18324 -0.187039 0.600262 2.64309 1.53038 6.01431";
+    const THREADS_SHARE_GLYPH_PREFIX_TOKENS = [
+      "M",
+      7.2474,
+      1.49853,
+      "C",
+      4.18324,
+      -0.187039,
+      0.600262,
+      2.64309,
+      1.53038,
+      6.01431
+    ];
     const CLEAN_LINK_ICON_PATH = "M245.14 352.14c8.49-8.49 22.27-8.49 30.76 0 8.5 8.5 8.5 22.27 0 30.76l-58.53 58.54c-20.35 20.34-47.15 30.51-73.94 30.51s-53.6-10.17-73.94-30.51c-20.34-20.35-30.52-47.15-30.52-73.94 0-26.78 10.18-53.6 30.52-73.94l58.53-58.53c8.5-8.5 22.27-8.5 30.77 0 8.49 8.49 8.49 22.27 0 30.76l-58.54 58.53c-11.84 11.85-17.77 27.51-17.77 43.18 0 15.67 5.93 31.33 17.77 43.17 11.85 11.85 27.51 17.78 43.18 17.78 15.67 0 31.33-5.93 43.17-17.77l58.54-58.54zm46.1-92.68c8.47 8.48 8.47 22.24 0 30.71-8.48 8.47-22.23 8.47-30.71 0l-39.78-39.78c-8.47-8.48-8.47-22.23 0-30.71 8.48-8.47 22.23-8.47 30.71 0l39.78 39.78zm45.28 245.07-25.07 5.19c-3.24.66-6.43-1.44-7.09-4.68l-16.18-78.09a6.006 6.006 0 0 1 4.66-7.11l25.05-5.29c3.27-.65 6.45 1.44 7.11 4.69l16.21 78.2c.66 3.25-1.44 6.43-4.69 7.09zM178.82 6.26 203.39.18c3.22-.8 6.48 1.17 7.28 4.38l19.46 77.29c.8 3.23-1.16 6.5-4.39 7.31l-24.8 6.28c-3.23.8-6.5-1.16-7.31-4.38l-19.46-77.43c-.81-3.23 1.16-6.5 4.38-7.31l.27-.06zm264.17 419.63-17.86 18.43a6.03 6.03 0 0 1-8.52 0l-57.22-55.51a6.015 6.015 0 0 1-.11-8.5l17.8-18.39c2.32-2.38 6.13-2.44 8.51-.12l57.28 55.58a6.027 6.027 0 0 1 .12 8.51zm68.81-112.11-6.62 24.69c-.85 3.21-4.15 5.12-7.37 4.26l-77.08-20.62c-3.22-.86-5.12-4.16-4.27-7.38l6.64-24.72c.86-3.21 4.16-5.12 7.38-4.27l77.05 20.67c3.21.85 5.12 4.16 4.27 7.37zM.38 201.65l6.97-24.15a6.025 6.025 0 0 1 7.42-4.11l76.66 21.79c3.2.91 5.05 4.25 4.15 7.45l-6.96 24.61a6.034 6.034 0 0 1-7.42 4.17L4.38 209.55a6.035 6.035 0 0 1-4.15-7.45l.15-.45zM65.14 87.17l17.84-17.81c2.35-2.34 6.17-2.33 8.51.02l56.38 56.41c2.33 2.35 2.33 6.15 0 8.49l-18.06 18.11a6.014 6.014 0 0 1-8.5.02L64.85 95.97a6.03 6.03 0 0 1 0-8.52l.29-.28zm200.98 71.28c-8.49 8.5-22.27 8.5-30.76 0-8.5-8.49-8.5-22.26 0-30.76l59.26-59.26 1.38-1.27c20.23-19.51 46.43-29.26 72.56-29.26 26.78 0 53.58 10.18 73.93 30.53 20.35 20.35 30.53 47.16 30.53 73.94 0 26.79-10.18 53.59-30.52 73.94l-59.26 59.26c-8.5 8.49-22.27 8.49-30.77 0-8.49-8.49-8.49-22.27 0-30.76l59.27-59.27c11.84-11.84 17.77-27.5 17.77-43.17 0-15.67-5.93-31.33-17.77-43.17-11.86-11.86-27.52-17.79-43.18-17.79-15.3 0-30.55 5.59-42.22 16.76l-60.22 60.28z";
     const MODAL_ID = "tm-post-media-modal";
     const LOG_PREFIX = "[Threads Target Downloader]";
@@ -1915,15 +2003,15 @@
       target.addEventListener(type, handler, options);
       state.listenerDisposers.push(() => target.removeEventListener(type, handler, options));
     }
-    function saveUserOptions() {
-      Promise.resolve(platform.saveOptions(normalizeOptions(USER_OPTIONS))).catch((error) => {
+    function saveUserOptions(changedKeys) {
+      Promise.resolve(platform.saveOptions(normalizeOptions(USER_OPTIONS), { changedKeys })).catch((error) => {
         warn("Saving options failed", error);
       });
     }
     function setUserOption(key, value) {
       if (!(key in DEFAULT_OPTIONS)) return;
       Object.assign(USER_OPTIONS, normalizeOptions({ ...USER_OPTIONS, [key]: value }));
-      saveUserOptions();
+      saveUserOptions([key]);
       applyUserOptions();
       void registerUserOptionMenu();
     }
@@ -3604,7 +3692,11 @@
     }
     function isStableThreadsShareGlyph(svg, pathData = getSvgPathData(svg)) {
       const viewBox = String(svg?.getAttribute?.("viewBox") || "").trim().replace(/\s+/g, " ");
-      return viewBox === "0 0 24 24" && pathData.length === 1 && pathData[0].startsWith(THREADS_SHARE_GLYPH_PATH_PREFIX);
+      if (viewBox !== "0 0 24 24" || pathData.length !== 1) return false;
+      const tokens = pathData[0].slice(0, 160).match(/[a-zA-Z]|[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?/g) || [];
+      return THREADS_SHARE_GLYPH_PREFIX_TOKENS.every(
+        (expected, index) => typeof expected === "string" ? tokens[index] === expected : Math.abs(Number(tokens[index]) - expected) <= 1e-3
+      );
     }
     function collectCompactActionIconEntries(actionBar) {
       const actionRect = actionBar?.getBoundingClientRect?.();
@@ -5245,7 +5337,10 @@
     async function updateOptions(nextOptions) {
       Object.assign(USER_OPTIONS, normalizeOptions({ ...USER_OPTIONS, ...nextOptions }));
       if (!isBatchMediaDownloadEnabled()) cancelBatchWork();
-      if (started && !stopped && !IS_NODE_RUNTIME2) applyUserOptions();
+      if (started && !stopped && !IS_NODE_RUNTIME2) {
+        applyUserOptions();
+        await registerUserOptionMenu();
+      }
       return Object.freeze({ ...USER_OPTIONS });
     }
     async function updateMessage(nextMessage) {
@@ -5300,24 +5395,65 @@
 
   // src/userscript/platform-adapter.js
   var OPTIONS_KEY = "threads-media-downloader-options-v1";
+  var OPTION_VALUE_PREFIX = "threads-media-downloader-option-v2:";
+  var OPTION_KEYS = Object.keys(DEFAULT_OPTIONS);
   function createUserscriptPlatformAdapter(environment = globalThis) {
     let disposeSettings = () => {
     };
+    let lastOptions;
+    function readOptions() {
+      if (typeof environment.GM_getValue !== "function") return null;
+      const options = { ...normalizeOptions(environment.GM_getValue(OPTIONS_KEY, null)) };
+      for (const key of OPTION_KEYS) {
+        const value = environment.GM_getValue(OPTION_VALUE_PREFIX + key, void 0);
+        if (value !== void 0) options[key] = value;
+      }
+      return normalizeOptions(options);
+    }
     return {
       async loadOptions() {
         try {
-          return typeof environment.GM_getValue === "function" ? environment.GM_getValue(OPTIONS_KEY, null) : null;
+          lastOptions = readOptions();
+          return lastOptions;
         } catch {
           return null;
         }
       },
-      async saveOptions(options) {
+      async saveOptions(options, { changedKeys } = {}) {
         if (typeof environment.GM_setValue !== "function") return false;
-        environment.GM_setValue(OPTIONS_KEY, JSON.stringify(options));
+        const normalized = normalizeOptions(options);
+        const keys = changedKeys || OPTION_KEYS;
+        for (const key of keys) {
+          if (Object.hasOwn(DEFAULT_OPTIONS, key)) {
+            environment.GM_setValue(OPTION_VALUE_PREFIX + key, normalized[key]);
+          }
+        }
         return true;
       },
-      subscribeOptions() {
+      subscribeOptions(listener) {
+        const window = environment.window || environment;
+        const document = environment.document;
+        let disposed = false;
+        const refresh = () => {
+          if (disposed || document?.visibilityState === "hidden") return;
+          try {
+            const next = readOptions();
+            if (!next || JSON.stringify(next) === JSON.stringify(lastOptions)) return;
+            lastOptions = next;
+            Promise.resolve(listener(next)).catch((error) => {
+              environment.console?.warn?.("[Threads Plugin] Updating settings failed", error);
+            });
+          } catch (error) {
+            environment.console?.warn?.("[Threads Plugin] Reading settings failed", error);
+          }
+        };
+        window.addEventListener?.("focus", refresh);
+        document?.addEventListener?.("visibilitychange", refresh);
         return () => {
+          if (disposed) return;
+          disposed = true;
+          window.removeEventListener?.("focus", refresh);
+          document?.removeEventListener?.("visibilitychange", refresh);
         };
       },
       downloadMedia(details) {
@@ -5428,11 +5564,18 @@
       message: createUserscriptMessage(environment.navigator)
     });
     await runtime.start();
-    return runtime;
+    const unsubscribeOptions = platform.subscribeOptions((options) => runtime.updateOptions(options));
+    return Object.freeze({
+      ...runtime,
+      async stop() {
+        unsubscribeOptions();
+        return runtime.stop();
+      }
+    });
   }
   if (!IS_NODE_RUNTIME) {
     bootstrapUserscript().then(() => {
-      console.log("[Threads Target Downloader]", "v5.3.0 loaded");
+      console.log("[Threads Target Downloader]", "v5.3.1 loaded");
     }).catch((error) => {
       console.error("[Threads Target Downloader]", "bootstrap failed", error);
     });

@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [5.3.1] - 2026-10-01
+
+### Fixed
+
+- Preserve body text ending in translation words or fractions; remove trailing UI only when supported by DOM evidence.
+- Exclude static split thread-progress badges (`1/N`) from long posts and continuation replies, with translation controls before or after the badge; clean each UI type once while retaining identical body words and fractions.
+- Save Tampermonkey options independently so edits in different tabs do not overwrite unrelated settings, and synchronize controls and menus when returning to a tab.
+- Disable Chrome settings and consent controls until persisted settings have loaded; failed reads cannot save the form's initial empty values.
+- Recognize rounded/minified Threads share SVG coordinates within the existing structural checks so Japanese and other interface languages retain post-text and clean-link tools.
+- Exclude Threads music cards and sibling lyrics by DOM containment, including lyrics scrolled above the playback control and shared text wrappers; retain the author's caption and song lists in both products.
+
 ## [5.3.0] - 2026-09-20
 
 ### Added

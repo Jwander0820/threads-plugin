@@ -39,10 +39,15 @@ comparison. The report is overwritten on the next run; copy it together with
 any referenced failure artifacts before starting a run whose evidence you want
 to retain. These generated artifacts are Git-ignored.
 
-The nine cases cover:
+The cases cover:
 
 - Mixed photo/video carousel ordering, poster deduplication, selection, and focus.
 - Below-viewport reply detail media ownership and exact text/link copying without parent content.
+- Japanese native action rows with rounded/minified share SVG coordinates retain exactly one text-copy, clean-link, and media tool; copied body words and fractions stay intact.
+- Body text ending in translation words and fractions remains intact; actual inline translation controls are excluded from the copied text.
+- Music attachment lyrics stay excluded when their scroll transform moves them above the playback control. Exact clipboard checks cover Chinese, English and Japanese play/pause controls and common `dir=auto` wrappers, including direct caption text nodes and inline author links; the author's song-related text, translation word and fraction remain intact.
+- Long posts and continuation replies exclude static split `N/M` badges without requiring media; cases cover first, middle and last posts in 2, 3, 14, 20 and 31-part threads. Identical body fractions and multi-line fractions remain intact, with a translation control before or after the badge, including nested `role=button` controls separated by NBSP. Each copy check resets the clipboard to require a fresh write.
+- Settings stay disabled during delayed reads from real Chrome storage; blocked early submission leaves persisted values unchanged.
 - SPA transitions, sensitive-route shutdown, route cache cleanup, and duplicate UI.
 - Automatic page language, persisted language overrides, and light/dark icon colors.
 - Consent revocation with the modal open, advanced capture unregistration, disabled
