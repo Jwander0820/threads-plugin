@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [5.3.2] - 2026-10-11
+
+### Fixed
+
+- Exclude colored author badges beside reply timestamps from copied post text in both products, while preserving the same words and line breaks in the body.
+
 ## [5.3.1] - 2026-10-01
 
 ### Fixed

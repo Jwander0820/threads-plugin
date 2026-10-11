@@ -230,8 +230,30 @@ export function createPostTextExtractor({
         );
     }
 
+    function isCompactHeaderBadge(element, headerRow) {
+        const text = getRenderedText(element).trim();
+        if (!text || text.includes('\n') || text.length > 64) return false;
+
+        // Include wrappers selected by the fallback collector, as well as the
+        // dir=auto label inside the pill. Do not identify UI by its wording.
+        const nodes = [element, ...Array.from(element.querySelectorAll?.('div, span') || [])];
+        for (let parent = element.parentElement; parent && parent !== headerRow; parent = parent.parentElement) {
+            nodes.push(parent);
+        }
+        return nodes.some(node => {
+            if (getRenderedText(node).trim() !== text || node.querySelector?.('a,button,[role="button"],img,video,svg,time')) return false;
+            const rect = node.getBoundingClientRect?.();
+            if (!rect || rect.width <= 0 || rect.width > 220 || rect.height <= 0 || rect.height > 48) return false;
+            const style = window.getComputedStyle(node);
+            const background = String(style?.backgroundColor || '').trim();
+            const transparent = /^(?:transparent|rgba\([^)]*,\s*0(?:\.0+)?\)|rgb\([^)]*\/\s*0(?:\.0+)?\))$/i;
+            return Boolean(style && /^(?:inline-)?flex$/.test(style.display) && style.alignItems === 'center' &&
+                background && !transparent.test(background) && parseFloat(style.borderRadius) >= rect.height / 4);
+        });
+    }
+
     function isInlinePostHeaderMetadataTextElement(element, root) {
-        if (!element?.matches?.('[dir="auto"]')) return false;
+        if (!element) return false;
 
         const elementRect = element.getBoundingClientRect?.();
         const elementColor = String(window.getComputedStyle(element)?.color || '');
@@ -250,8 +272,10 @@ export function createPostTextExtractor({
                     ? Math.min(elementRect.bottom, timeRect.bottom) - Math.max(elementRect.top, timeRect.top)
                     : 0;
                 if (
-                    timeColor === elementColor &&
-                    overlap >= Math.min(elementRect.height, timeRect?.height || 0) * 0.5
+                    overlap > 0 &&
+                    overlap >= Math.min(elementRect.height, timeRect?.height || 0) * 0.5 &&
+                    ((element.matches?.('[dir="auto"]') && timeColor === elementColor) ||
+                        isCompactHeaderBadge(element, ancestor))
                 ) {
                     return true;
                 }

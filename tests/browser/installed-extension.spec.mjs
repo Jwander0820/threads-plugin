@@ -175,6 +175,55 @@ test('copy preserves body words and fractions while removing actual translation 
     await expect.poll(async () => (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n')).toBe(body);
 });
 
+test('copy excludes colored author badges in the header while preserving identical body text', async ({ page }) => {
+    await acceptDisclosure(page, REPLY_PATH);
+    const post = page.locator('#reply-post');
+    const body = '作者\n不過真的好讚哦~~\n下午再聽一次\nAuthor\n我最喜歡的工作是翻譯\n3/4';
+    await post.locator('p[dir="auto"]').evaluate((element, text) => { element.textContent = text; }, body);
+    await post.locator('header').evaluate(header => {
+        Object.assign(header.style, { display: 'flex', alignItems: 'center', gap: '8px' });
+        header.querySelector('time').style.color = 'rgb(153, 153, 153)';
+        // Live Threads: timestamp and colored badge share a compact header;
+        // the badge has three wrappers and a separately selected dir=auto span.
+        const group = document.createElement('div');
+        group.dataset.authorBadge = '1';
+        group.innerHTML = '<div><div><span dir="auto">作者</span></div></div>';
+        Object.assign(group.style, { display: 'flex', alignItems: 'center' });
+        Object.assign(group.firstElementChild.firstElementChild.style, {
+            display: 'flex', alignItems: 'center', padding: '3px 6px',
+            borderRadius: '12px', backgroundColor: 'rgb(231, 243, 255)'
+        });
+        Object.assign(group.querySelector('span').style, {
+            display: 'block', color: 'rgb(0, 149, 246)', fontSize: '12px', lineHeight: '1.4'
+        });
+        header.append(group);
+    });
+    const expectCopy = async expected => {
+        await page.evaluate(() => navigator.clipboard.writeText('author-badge-sentinel'));
+        await post.locator('.tm-post-copy-tool-button').click();
+        await expect.poll(async () => (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n')).toBe(expected);
+    };
+    for (const label of ['作者', 'Author', '投稿者', 'Auteur']) {
+        await post.locator('[data-author-badge] span').evaluate((element, text) => { element.textContent = text; }, label);
+        await post.locator('p').evaluate(element => { element.textContent = '不過真的好讚哦~~\n下午再聽一次'; });
+        await expectCopy('不過真的好讚哦~~\n下午再聽一次');
+        await post.locator('p').evaluate((element, text) => { element.textContent = text; }, body);
+        await expectCopy(body);
+    }
+    // Fallback candidates include every div/span, so badge wrappers must not
+    // reintroduce the label when the post has no dir=auto text candidates.
+    await post.locator('[dir="auto"]').evaluateAll(elements => elements.forEach(element => element.removeAttribute('dir')));
+    await expectCopy(body);
+    // A similarly styled word below the header is still legitimate body text.
+    await post.locator('[data-author-badge]').evaluate(element => {
+        element.querySelector('span').textContent = '正文標籤';
+        element.closest('article').querySelector('p').append(element);
+    });
+    await expectCopy(`${body}\n正文標籤`);
+    await post.locator('.tm-post-link-tool-button').click();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`${ORIGIN}${REPLY_PATH}`);
+});
+
 test('long post and reply copy exclude the split static page badge while preserving body fractions', async ({ page }) => {
     test.setTimeout(120000);
     await acceptDisclosure(page, MIXED_PATH);

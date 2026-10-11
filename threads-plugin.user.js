@@ -3,7 +3,7 @@
 // @name:zh-TW   Threads Plugin
 // @name:en      Threads Plugin
 // @namespace    https://github.com/Jwander0820
-// @version      5.3.1
+// @version      5.3.2
 // @description  Download images and videos from Threads posts, select media in batches, copy post text, and copy links with tracking parameters removed.
 // @description:zh-TW 為 Threads 貼文提供圖片與影片下載、批次資源選擇、貼文文字複製，以及去除追蹤碼的連結複製功能。
 // @description:en Download images and videos from Threads posts, select media in batches, copy post text, and copy links with tracking parameters removed.
@@ -600,8 +600,25 @@
         headerRect && metadataRect && contentRect && metadataRect.top >= headerRect.bottom - 2 && contentRect.top >= metadataRect.bottom - 2
       );
     }
+    function isCompactHeaderBadge(element, headerRow) {
+      const text = getRenderedText(element).trim();
+      if (!text || text.includes("\n") || text.length > 64) return false;
+      const nodes = [element, ...Array.from(element.querySelectorAll?.("div, span") || [])];
+      for (let parent = element.parentElement; parent && parent !== headerRow; parent = parent.parentElement) {
+        nodes.push(parent);
+      }
+      return nodes.some((node) => {
+        if (getRenderedText(node).trim() !== text || node.querySelector?.('a,button,[role="button"],img,video,svg,time')) return false;
+        const rect = node.getBoundingClientRect?.();
+        if (!rect || rect.width <= 0 || rect.width > 220 || rect.height <= 0 || rect.height > 48) return false;
+        const style = window.getComputedStyle(node);
+        const background = String(style?.backgroundColor || "").trim();
+        const transparent = /^(?:transparent|rgba\([^)]*,\s*0(?:\.0+)?\)|rgb\([^)]*\/\s*0(?:\.0+)?\))$/i;
+        return Boolean(style && /^(?:inline-)?flex$/.test(style.display) && style.alignItems === "center" && background && !transparent.test(background) && parseFloat(style.borderRadius) >= rect.height / 4);
+      });
+    }
     function isInlinePostHeaderMetadataTextElement(element, root) {
-      if (!element?.matches?.('[dir="auto"]')) return false;
+      if (!element) return false;
       const elementRect = element.getBoundingClientRect?.();
       const elementColor = String(window.getComputedStyle(element)?.color || "");
       if (!elementRect || !elementColor) return false;
@@ -613,7 +630,7 @@
           const timeRect = timeElement.getBoundingClientRect?.();
           const timeColor = String(window.getComputedStyle(timeElement)?.color || "");
           const overlap = timeRect ? Math.min(elementRect.bottom, timeRect.bottom) - Math.max(elementRect.top, timeRect.top) : 0;
-          if (timeColor === elementColor && overlap >= Math.min(elementRect.height, timeRect?.height || 0) * 0.5) {
+          if (overlap > 0 && overlap >= Math.min(elementRect.height, timeRect?.height || 0) * 0.5 && (element.matches?.('[dir="auto"]') && timeColor === elementColor || isCompactHeaderBadge(element, ancestor))) {
             return true;
           }
         }
@@ -5575,7 +5592,7 @@
   }
   if (!IS_NODE_RUNTIME) {
     bootstrapUserscript().then(() => {
-      console.log("[Threads Target Downloader]", "v5.3.1 loaded");
+      console.log("[Threads Target Downloader]", "v5.3.2 loaded");
     }).catch((error) => {
       console.error("[Threads Target Downloader]", "bootstrap failed", error);
     });
