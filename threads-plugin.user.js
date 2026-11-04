@@ -3,7 +3,7 @@
 // @name:zh-TW   Threads Plugin
 // @name:en      Threads Plugin
 // @namespace    https://github.com/Jwander0820
-// @version      5.3.2
+// @version      5.3.3
 // @description  Download images and videos from Threads posts, select media in batches, copy post text, and copy links with tracking parameters removed.
 // @description:zh-TW 為 Threads 貼文提供圖片與影片下載、批次資源選擇、貼文文字複製，以及去除追蹤碼的連結複製功能。
 // @description:en Download images and videos from Threads posts, select media in batches, copy post text, and copy links with tracking parameters removed.
@@ -582,11 +582,18 @@
         rootRect.bottom
       );
     }
+    function getFollowingContentRow(metadataRow, root) {
+      for (let node = metadataRow, depth = 0; node && node !== root && depth < 3; node = node.parentElement, depth += 1) {
+        if (!root.contains(node)) return null;
+        if (node.nextElementSibling) return node.nextElementSibling;
+      }
+      return null;
+    }
     function isPostHeaderMetadataTextElement(element, root) {
       if (!element?.matches?.('[dir="auto"]') || element.closest?.("a[href]")) return false;
       const metadataRow = element.parentElement;
       const headerRow = metadataRow?.previousElementSibling;
-      const contentRow = metadataRow?.nextElementSibling;
+      const contentRow = getFollowingContentRow(metadataRow, root);
       if (!metadataRow || !headerRow || !contentRow || !root.contains(metadataRow)) return false;
       const timeElement = headerRow.querySelector?.("time[datetime], time");
       if (!timeElement) return false;
@@ -5592,7 +5599,7 @@
   }
   if (!IS_NODE_RUNTIME) {
     bootstrapUserscript().then(() => {
-      console.log("[Threads Target Downloader]", "v5.3.2 loaded");
+      console.log("[Threads Target Downloader]", "v5.3.3 loaded");
     }).catch((error) => {
       console.error("[Threads Target Downloader]", "bootstrap failed", error);
     });

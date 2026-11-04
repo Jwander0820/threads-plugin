@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [5.3.3] - 2026-11-04
+
+### Fixed
+
+- Exclude Threads' automatic-translation attribution row (for example `原文：英文 · 查看原文`) from copied post text in both products when the row is nested as the last line of the author block; body text in the body color is still kept.
+
 ## [5.3.2] - 2026-10-11
 
 ### Fixed

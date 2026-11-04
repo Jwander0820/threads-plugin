@@ -205,12 +205,24 @@ export function createPostTextExtractor({
         );
     }
 
+    function getFollowingContentRow(metadataRow, root) {
+        // Threads may nest a metadata row (such as the automatic translation
+        // attribution) as the last child of the author block. Its body is then
+        // the next sibling of that block. Climb only a short, root-bounded
+        // distance; position and color checks below still have to agree.
+        for (let node = metadataRow, depth = 0; node && node !== root && depth < 3; node = node.parentElement, depth += 1) {
+            if (!root.contains(node)) return null;
+            if (node.nextElementSibling) return node.nextElementSibling;
+        }
+        return null;
+    }
+
     function isPostHeaderMetadataTextElement(element, root) {
         if (!element?.matches?.('[dir="auto"]') || element.closest?.('a[href]')) return false;
 
         const metadataRow = element.parentElement;
         const headerRow = metadataRow?.previousElementSibling;
-        const contentRow = metadataRow?.nextElementSibling;
+        const contentRow = getFollowingContentRow(metadataRow, root);
         if (!metadataRow || !headerRow || !contentRow || !root.contains(metadataRow)) return false;
 
         const timeElement = headerRow.querySelector?.('time[datetime], time');
