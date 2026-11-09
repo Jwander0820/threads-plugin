@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [5.3.4] - 2026-11-08
+
+### Fixed
+
+- Keep the floating media download button below Threads' pinned title row and inside the main content area; hide it when its media leaves that area. Preserve the existing hover discovery for all supported media, including repeated document scrolling, root/body viewport overflow, media overlays and positioned wrappers. Scroll limiting updates geometry without repeating media classification.
+- Bound expanded-image downloads to their own viewer, so the background post column and full-screen backdrop do not suppress the floating download button or block its activation.
+
 ## [5.3.3] - 2026-11-04
 
 ### Fixed

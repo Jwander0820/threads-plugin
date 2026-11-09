@@ -73,6 +73,33 @@ discovery excludes it from the picker, so this case verifies the empty state;
 it does not exercise a per-item `not_found` result or successful retry. Those
 task outcomes have separate Node behavior tests.
 
+## Floating download control regression
+
+Run the separate hover regression against a fresh build:
+
+```powershell
+npm.cmd run build
+npm.cmd run test:hover
+```
+
+This exercises the shared runtime and generated userscript with real pointer
+events in disposable browser contexts. It checks twelve photos down and back
+up a long page, HTML viewport overflow, BODY overflow propagation, genuine BODY
+scrolling, nested and scaled scrollports, media overlays, inline and zero-height
+gallery wrappers, sticky title-row bounds, hiding/reappearance, horizontal
+carousels, and trusted download clicks. Each case also opens an image in a
+dialog viewer nested beneath background backdrop/column containers, activates
+the floating download control, closes the viewer, and returns to normal hover
+downloads. The script uses bundled Chromium when
+available, then an installed Chrome/Edge executable on Windows; an explicit
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` takes priority.
+
+Documents and images are synthetic offline fixtures. A GM facade records the
+download request without writing files. This is browser DOM/event evidence;
+it does not load an MV3 extension or verify live CDN downloads. The existing
+installed-extension suite above covers the separate extension integration.
+Failure screenshots are saved under `artifacts/hover-regression/`.
+
 ## Optional native-download routing diagnostic
 
 The installed-extension suite's request routing does not currently intercept

@@ -3,7 +3,7 @@
 // @name:zh-TW   Threads Plugin
 // @name:en      Threads Plugin
 // @namespace    https://github.com/Jwander0820
-// @version      5.3.3
+// @version      5.3.4
 // @description  Download images and videos from Threads posts, select media in batches, copy post text, and copy links with tracking parameters removed.
 // @description:zh-TW 為 Threads 貼文提供圖片與影片下載、批次資源選擇、貼文文字複製，以及去除追蹤碼的連結複製功能。
 // @description:en Download images and videos from Threads posts, select media in batches, copy post text, and copy links with tracking parameters removed.
@@ -3165,6 +3165,10 @@
       if (stopped || !isPerMediaDownloadEnabled() || !isValidUserActivationToken(activationToken)) return false;
       if (button.dataset.tmBusy === "1") return false;
       const element = options.element || state.elementByButton.get(button);
+      if (button === state.hoverButton && !getHoverButtonPosition(element)) {
+        hideHoverButton();
+        return false;
+      }
       const resolveMediaItem = options.resolveMediaItem || mediaItemFromElementWithRetry;
       const startDownload = options.downloadItemFn || downloadItem;
       const setTimer = options.setTimeoutFn || ((callback, delayMs) => window.setTimeout(callback, delayMs));
@@ -3286,11 +3290,11 @@
       if (!isPerMediaDownloadEnabled() || !element || !document.documentElement.contains(element)) return;
       const button = ensureHoverButton();
       if (!button) return;
+      if (!positionFloatingButton(button, element)) return;
       state.hoverElement = element;
       state.elementByButton.set(button, element);
       button.dataset.tmHidden = "0";
       button.dataset.tmKind = isVideoTargetElement(element) ? "video" : "photo";
-      positionFloatingButton(button, element);
     }
     function hideHoverButton() {
       const button = state.hoverButton;
@@ -3325,10 +3329,65 @@
         hideHoverButton();
       }, 140);
     }
-    function positionFloatingButton(button, element) {
+    function getHoverButtonPosition(element) {
+      if (!element || !document.documentElement.contains(element)) return null;
       const rect = element.getBoundingClientRect();
-      button.style.left = `${Math.max(8, Math.round(rect.left + 10))}px`;
-      button.style.top = `${Math.max(8, Math.round(rect.top + 10))}px`;
+      const viewer = element.closest?.('dialog,[role="dialog"]');
+      let clipLeft = 8;
+      let clipTop = 8;
+      let clipRight = window.innerWidth - 8;
+      let clipBottom = window.innerHeight - 8;
+      const headers = [];
+      for (let parent = element.parentElement; parent && (!viewer || parent !== viewer.parentElement); parent = parent.parentElement) {
+        if (parent === document.documentElement) continue;
+        const style = window.getComputedStyle(parent);
+        if (parent === document.body) {
+          const rootStyle = window.getComputedStyle(document.documentElement);
+          if (rootStyle.overflowX === "visible" && rootStyle.overflowY === "visible") continue;
+        }
+        if (style.display === "inline" || style.display === "contents") continue;
+        const header = parent === viewer ? null : parent.previousElementSibling;
+        if (header && /^(sticky|fixed)$/.test(window.getComputedStyle(header).position)) {
+          headers.push(header.getBoundingClientRect());
+        }
+        const isMain = parent === viewer || parent.matches?.('main,[role="main"]');
+        const clipsX = isMain || /^(auto|scroll)$/.test(style.overflowX) && parent.scrollWidth > parent.clientWidth;
+        const clipsY = isMain || /^(auto|scroll)$/.test(style.overflowY) && parent.scrollHeight > parent.clientHeight;
+        if (!clipsX && !clipsY) continue;
+        const bounds = parent.getBoundingClientRect();
+        const scaleX = parent.offsetWidth > 0 ? bounds.width / parent.offsetWidth : 1;
+        const scaleY = parent.offsetHeight > 0 ? bounds.height / parent.offsetHeight : 1;
+        const x = bounds.left + parent.clientLeft * scaleX;
+        const y = bounds.top + parent.clientTop * scaleY;
+        if (clipsX) {
+          clipLeft = Math.max(clipLeft, x);
+          clipRight = Math.min(clipRight, x + parent.clientWidth * scaleX);
+        }
+        if (clipsY) {
+          clipTop = Math.max(clipTop, y);
+          clipBottom = Math.min(clipBottom, y + parent.clientHeight * scaleY);
+        }
+      }
+      for (const headerRect of headers.sort((a, b) => a.top - b.top)) {
+        if (headerRect.top <= clipTop && headerRect.bottom > clipTop && headerRect.left <= Math.max(clipLeft, rect.left) && headerRect.right >= Math.min(clipRight, rect.right)) {
+          clipTop = headerRect.bottom;
+        }
+      }
+      if (rect.bottom <= clipTop || rect.top >= clipBottom || rect.right <= clipLeft || rect.left >= clipRight || clipRight - clipLeft < 34 || clipBottom - clipTop < 34) return null;
+      return {
+        left: Math.min(Math.max(Math.round(rect.left + 10), clipLeft), clipRight - 34),
+        top: Math.min(Math.max(Math.round(rect.top + 10), clipTop), clipBottom - 34)
+      };
+    }
+    function positionFloatingButton(button, element) {
+      const position = getHoverButtonPosition(element);
+      if (!position) {
+        hideHoverButton();
+        return false;
+      }
+      button.style.left = `${position.left}px`;
+      button.style.top = `${position.top}px`;
+      return true;
     }
     function isPlausibleStandaloneVideoAnchor(video) {
       const rect = video.getBoundingClientRect();
@@ -4725,6 +4784,7 @@
       }, getMediaRouteKey());
       state.mediaRouteKey = nextScope.routeKey;
       if (nextScope.changed) {
+        hideHoverButton();
         cancelBatchWork();
         state.diagnostics.routeTransitions += 1;
         state.videoUrlsByPostId.clear();
@@ -4761,7 +4821,7 @@
         cleanupPerMediaDownloadButton();
         return;
       }
-      const hoverTargetIsValid = state.hoverElement && isDownloadableHoverMedia(state.hoverElement) && isPlausibleHoverRect(state.hoverElement.getBoundingClientRect());
+      const hoverTargetIsValid = state.hoverElement && document.documentElement.contains(state.hoverElement) && isDownloadableHoverMedia(state.hoverElement) && isPlausibleHoverRect(state.hoverElement.getBoundingClientRect());
       if (!hoverTargetIsValid) {
         hideHoverButton();
         return;
@@ -4805,6 +4865,9 @@
       });
     }
     function refreshButtonsSoon(event) {
+      if ((event?.type === "scroll" || event?.type === "resize") && state.hoverElement && state.hoverButton) {
+        positionFloatingButton(state.hoverButton, state.hoverElement);
+      }
       if (shouldIgnoreScrollRefresh(event)) return;
       if (event?.type === "resize") {
         state.pendingLayoutFullRefresh = true;
@@ -5200,6 +5263,9 @@
       ensureCopyButtonsForBlocks,
       ensureDetailButton,
       ensureHoverButton,
+      showHoverButton,
+      refreshHoverButtonLayout,
+      refreshButtonsSoon,
       extractPostBlockText,
       extractVideoUrlsFromText,
       finalizeModalItems,
@@ -5599,7 +5665,7 @@
   }
   if (!IS_NODE_RUNTIME) {
     bootstrapUserscript().then(() => {
-      console.log("[Threads Target Downloader]", "v5.3.3 loaded");
+      console.log("[Threads Target Downloader]", "v5.3.4 loaded");
     }).catch((error) => {
       console.error("[Threads Target Downloader]", "bootstrap failed", error);
     });

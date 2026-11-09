@@ -1508,6 +1508,10 @@ export async function createThreadsRuntime({
         if (button.dataset.tmBusy === '1') return false;
 
         const element = options.element || state.elementByButton.get(button);
+        if (button === state.hoverButton && !getHoverButtonPosition(element)) {
+            hideHoverButton();
+            return false;
+        }
         const resolveMediaItem = options.resolveMediaItem || mediaItemFromElementWithRetry;
         const startDownload = options.downloadItemFn || downloadItem;
         const setTimer = options.setTimeoutFn || ((callback, delayMs) => window.setTimeout(callback, delayMs));
@@ -1653,11 +1657,11 @@ export async function createThreadsRuntime({
 
         const button = ensureHoverButton();
         if (!button) return;
+        if (!positionFloatingButton(button, element)) return;
         state.hoverElement = element;
         state.elementByButton.set(button, element);
         button.dataset.tmHidden = '0';
         button.dataset.tmKind = isVideoTargetElement(element) ? 'video' : 'photo';
-        positionFloatingButton(button, element);
     }
 
     function hideHoverButton() {
@@ -1698,10 +1702,82 @@ export async function createThreadsRuntime({
         }, 140);
     }
 
-    function positionFloatingButton(button, element) {
+    function getHoverButtonPosition(element) {
+        if (!element || !document.documentElement.contains(element)) return null;
         const rect = element.getBoundingClientRect();
-        button.style.left = `${Math.max(8, Math.round(rect.left + 10))}px`;
-        button.style.top = `${Math.max(8, Math.round(rect.top + 10))}px`;
+        // Expanded media owns a separate surface. Background column ancestors
+        // and full-screen backdrop siblings must not become its title bounds.
+        const viewer = element.closest?.('dialog,[role="dialog"]');
+        // Keep the original floating control, bounded by the main content area
+        // and its scroll containers. Media overlays do not change eligibility.
+        let clipLeft = 8;
+        let clipTop = 8;
+        let clipRight = window.innerWidth - 8;
+        let clipBottom = window.innerHeight - 8;
+        const headers = [];
+        for (let parent = element.parentElement; parent && (!viewer || parent !== viewer.parentElement); parent = parent.parentElement) {
+            // Root overflow belongs to the viewport, whose bounds are already
+            // included above. Its document-scrolled rect is not a scrollport.
+            if (parent === document.documentElement) continue;
+            const style = window.getComputedStyle(parent);
+            if (parent === document.body) {
+                const rootStyle = window.getComputedStyle(document.documentElement);
+                if (rootStyle.overflowX === 'visible' && rootStyle.overflowY === 'visible') continue;
+            }
+            if (style.display === 'inline' || style.display === 'contents') continue;
+            // Threads' column body scrolls with the document underneath a
+            // sticky sibling title row; the body's own rect does not exclude it.
+            const header = parent === viewer ? null : parent.previousElementSibling;
+            if (header && /^(sticky|fixed)$/.test(window.getComputedStyle(header).position)) {
+                headers.push(header.getBoundingClientRect());
+            }
+            // Limit the content area and real scrollports, not every media
+            // wrapper with overflow:hidden (which may not clip positioned media).
+            const isMain = parent === viewer || parent.matches?.('main,[role="main"]');
+            const clipsX = isMain || (/^(auto|scroll)$/.test(style.overflowX) && parent.scrollWidth > parent.clientWidth);
+            const clipsY = isMain || (/^(auto|scroll)$/.test(style.overflowY) && parent.scrollHeight > parent.clientHeight);
+            if (!clipsX && !clipsY) continue;
+            const bounds = parent.getBoundingClientRect();
+            const scaleX = parent.offsetWidth > 0 ? bounds.width / parent.offsetWidth : 1;
+            const scaleY = parent.offsetHeight > 0 ? bounds.height / parent.offsetHeight : 1;
+            const x = bounds.left + parent.clientLeft * scaleX;
+            const y = bounds.top + parent.clientTop * scaleY;
+            if (clipsX) {
+                clipLeft = Math.max(clipLeft, x);
+                clipRight = Math.min(clipRight, x + parent.clientWidth * scaleX);
+            }
+            if (clipsY) {
+                clipTop = Math.max(clipTop, y);
+                clipBottom = Math.min(clipBottom, y + parent.clientHeight * scaleY);
+            }
+        }
+        // Nested scrollports can start below the viewport top. Apply their
+        // title rows only after the final scrollport bounds have been resolved.
+        for (const headerRect of headers.sort((a, b) => a.top - b.top)) {
+            if (headerRect.top <= clipTop && headerRect.bottom > clipTop &&
+                headerRect.left <= Math.max(clipLeft, rect.left) &&
+                headerRect.right >= Math.min(clipRight, rect.right)) {
+                clipTop = headerRect.bottom;
+            }
+        }
+        if (rect.bottom <= clipTop || rect.top >= clipBottom ||
+            rect.right <= clipLeft || rect.left >= clipRight ||
+            clipRight - clipLeft < 34 || clipBottom - clipTop < 34) return null;
+        return {
+            left: Math.min(Math.max(Math.round(rect.left + 10), clipLeft), clipRight - 34),
+            top: Math.min(Math.max(Math.round(rect.top + 10), clipTop), clipBottom - 34)
+        };
+    }
+
+    function positionFloatingButton(button, element) {
+        const position = getHoverButtonPosition(element);
+        if (!position) {
+            hideHoverButton();
+            return false;
+        }
+        button.style.left = `${position.left}px`;
+        button.style.top = `${position.top}px`;
+        return true;
     }
 
     function isPlausibleStandaloneVideoAnchor(video) {
@@ -3552,6 +3628,7 @@ export async function createThreadsRuntime({
 
         state.mediaRouteKey = nextScope.routeKey;
         if (nextScope.changed) {
+            hideHoverButton();
             cancelBatchWork();
             state.diagnostics.routeTransitions += 1;
             state.videoUrlsByPostId.clear();
@@ -3596,6 +3673,7 @@ export async function createThreadsRuntime({
             return;
         }
         const hoverTargetIsValid = state.hoverElement &&
+            document.documentElement.contains(state.hoverElement) &&
             isDownloadableHoverMedia(state.hoverElement) &&
             isPlausibleHoverRect(state.hoverElement.getBoundingClientRect());
 
@@ -3651,6 +3729,11 @@ export async function createThreadsRuntime({
     }
 
     function refreshButtonsSoon(event) {
+        // Do this before throttling (including ignored horizontal scrolls), so
+        // stale controls cannot intercept a click during the refresh interval.
+        if ((event?.type === 'scroll' || event?.type === 'resize') && state.hoverElement && state.hoverButton) {
+            positionFloatingButton(state.hoverButton, state.hoverElement);
+        }
         if (shouldIgnoreScrollRefresh(event)) return;
         if (event?.type === 'resize') {
             state.pendingLayoutFullRefresh = true;
@@ -4093,6 +4176,9 @@ export async function createThreadsRuntime({
             ensureCopyButtonsForBlocks,
             ensureDetailButton,
             ensureHoverButton,
+            showHoverButton,
+            refreshHoverButtonLayout,
+            refreshButtonsSoon,
             extractPostBlockText,
             extractVideoUrlsFromText,
             finalizeModalItems,

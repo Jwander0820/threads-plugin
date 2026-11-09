@@ -44,6 +44,12 @@ The shared tree does not call `GM_*` or `chrome.*`. Both entry points import and
 - `capture-bridge.js` creates and validates the small metadata-only MAIN-to-ISOLATED payload, including origin/source checks, route and generation binding, replay IDs, a 64 KiB payload limit, 128-record limit, 8192-character URL limit, 80-character post-ID limit, 256-valid-message/60-second rate limit, replay LRU of 256 IDs, operation, post identity, and media URL validation.
 - `consent-state.js` and `options.js` normalize persisted state and make permissive state impossible to obtain from malformed input. The four user-facing page capabilities—original-link copy, post-text copy, batch media download, and per-media download—have independent booleans shared by both products; the former batch-picker key is accepted only as a migration fallback.
 
+The per-media floating download control keeps the existing media discovery and pointer handling. Geometry is limited to the viewport, main content area and actual auto/scroll scrollports. Root HTML overflow and BODY overflow propagated to the viewport use the viewport bounds rather than a document-scrolled element rectangle. Ordinary media wrappers and named gallery regions do not become extra download eligibility rules. Scaled scrollports convert client dimensions to viewport coordinates.
+
+A pinned sticky or fixed title row immediately preceding a body ancestor raises the upper boundary when it spans the visible media width. Title rows are applied after all scrollport bounds are known, including nested scrollports below the viewport top. The control hides when its media leaves that area. Immediate scroll/resize handling updates only the active control's geometry; the existing throttled refresh retains media validation and classification. Activation validates the bounds again, and route transitions clear the active control.
+
+Expanded images resolve bounds only up to their nearest dialog viewer, including the viewer's own scrollport. Background post-column ancestors and backdrop siblings outside that viewer do not contribute title rows or clipping bounds. The same scope is used for layout and click-time validation.
+
 ## Userscript runtime
 
 `src/userscript/entry.js` creates the shared runtime with the userscript adapter. The adapter is the only userscript layer that touches Tampermonkey APIs. It supplies `GM_addStyle`, downloads, cross-origin requests, storage, settings menu commands, clipboard access, and `unsafeWindow` access for the legacy same-page capture path.

@@ -2,6 +2,22 @@
 
 > Historical 5.1.0 release evidence. For 5.2.0, the owner has initially confirmed the new language selection and four independent feature controls on 2026-08-24, and the automated suite has been rerun locally. This does not replace a new exact-ZIP clean-profile matrix, service-worker restart check, Tampermonkey regression run, checksum, or final release sign-off.
 
+## Unreleased 5.3.4 floating download bounds
+
+`npm.cmd run verify` covers the shared layout/activation regressions and generated
+artifact freshness. After building, `npm.cmd run test:hover` runs real pointer
+events against the shared runtime and generated userscript with twelve photos
+down and back up each long-page fixture. The cases cover HTML/BODY viewport
+overflow, genuine internal scrollports, scaled/nested layouts, sticky title rows,
+media wrappers, horizontal carousels, expanded-image viewer downloads and return
+to normal browsing, and download activation. Details and the
+browser-selection rules are in `tests/browser/README.md`.
+
+These are offline browser DOM/event tests with a recording GM facade. They do
+not certify a current live Threads session, an installed Tampermonkey manager,
+native download completion, or an exact-ZIP MV3 release. Version 5.3.4 remains
+an unpublished working update.
+
 ## Unreleased batch results and module extraction checkpoint — 2026-09-20
 
 This checkpoint describes local changes after 5.2.2; the historical release sign-off below is unchanged.
