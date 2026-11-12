@@ -17,19 +17,25 @@ function randomMessageId(environment) {
     return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
 }
 
-function postRecords(environment, text, context, shouldContinue) {
-    if (!text || !context?.allowed || !shouldContinue()) return;
+export const MAIN_CAPTURE_MAX_PENDING_BATCHES = 16;
+
+function collectRecords(text, context, shouldContinue) {
+    if (!text || !context?.allowed || !shouldContinue()) return [];
     let parsed;
-    try { parsed = JSON.parse(String(text).replace(/^\s*for\s*\(\s*;\s*;\s*\)\s*;/, '')); } catch { return; }
-    if (!shouldContinue()) return;
+    try { parsed = JSON.parse(String(text).replace(/^\s*for\s*\(\s*;\s*;\s*\)\s*;/, '')); } catch { return []; }
+    if (!shouldContinue()) return [];
+    return collectStructuredMediaUrls(parsed);
+}
+
+function postRecordBatch(environment, batch, routeState) {
     const payload = createCaptureBridgePayload({
-        records: collectStructuredMediaUrls(parsed),
-        sourceRouteKey: context.sourceRouteKey,
-        sourceRouteGeneration: context.sourceRouteGeneration,
-        operationId: context.operation,
+        records: batch.records,
+        sourceRouteKey: routeState.sourceRouteKey,
+        sourceRouteGeneration: routeState.sourceRouteGeneration,
+        operationId: batch.operation,
         messageId: randomMessageId(environment)
     });
-    if (payload && shouldContinue()) environment.postMessage(payload, environment.location.origin);
+    if (payload) environment.postMessage(payload, environment.location.origin);
 }
 
 function isRouteGeneration(value) {
@@ -104,17 +110,37 @@ function createMainCaptureInstallation(environment, options = {}) {
     const activeInspections = new Set();
     const requestState = new WeakMap();
 
-    const shouldContinue = (context) => !stopped &&
-        routeState?.sourceRouteGeneration === context.sourceRouteGeneration &&
-        !isSensitiveThreadsRoute(environment.location.href) &&
-        buildMediaRouteKey(environment.location.href) === context.sourceRouteKey;
+    // Records are bound to their post code, so a response stays useful after
+    // an SPA navigation: Threads preloads the destination query before the
+    // route commits. Batches wait here until the isolated world has announced
+    // the route state they must be labelled with.
+    const pendingBatches = [];
+    const shouldContinue = () => !stopped &&
+        !isSensitiveThreadsRoute(environment.location.href);
+    const hasCurrentRouteState = () => Boolean(routeState) &&
+        routeState.sourceRouteKey === buildMediaRouteKey(environment.location.href);
+    const flushPendingBatches = () => {
+        if (!shouldContinue() || !hasCurrentRouteState()) return;
+        pendingBatches.splice(0).forEach((batch) => {
+            try { postRecordBatch(environment, batch, routeState); } catch {}
+        });
+    };
+    const deliverRecords = (records, context) => {
+        if (!records.length || !shouldContinue()) return;
+        pendingBatches.push({ records, operation: context.operation });
+        while (pendingBatches.length > MAIN_CAPTURE_MAX_PENDING_BATCHES) pendingBatches.shift();
+        flushPendingBatches();
+    };
     const abortInspections = () => {
         activeInspections.forEach((controller) => controller.abort());
         activeInspections.clear();
     };
     const invalidateRouteState = (requestNextState = true) => {
         routeState = null;
-        abortInspections();
+        if (isSensitiveThreadsRoute(environment.location.href)) {
+            pendingBatches.length = 0;
+            abortInspections();
+        }
         if (requestNextState) {
             try { options.onRouteInvalidated?.(); } catch {}
         }
@@ -130,15 +156,12 @@ function createMainCaptureInstallation(environment, options = {}) {
             sourceRouteKey: nextState.sourceRouteKey,
             sourceRouteGeneration: nextState.sourceRouteGeneration
         });
+        flushPendingBatches();
         return true;
     };
     const classify = (details) => {
-        if (!routeState) return { allowed: false, reason: 'route_state_required' };
         try {
-            const classified = classifyNetworkCaptureRequest({ ...details, routeUrl: environment.location.href });
-            return classified.allowed
-                ? { ...classified, sourceRouteGeneration: routeState.sourceRouteGeneration }
-                : classified;
+            return classifyNetworkCaptureRequest({ ...details, routeUrl: environment.location.href });
         }
         catch { return { allowed: false, reason: 'classification_failed' }; }
     };
@@ -151,7 +174,10 @@ function createMainCaptureInstallation(environment, options = {}) {
         return inspect({
             signal: controller.signal,
             shouldContinue: () => shouldContinue(context),
-            extractor: (text) => postRecords(environment, text, context, () => shouldContinue(context))
+            extractor: (text) => deliverRecords(
+                collectRecords(text, context, () => shouldContinue(context)),
+                context
+            )
         }).finally(() => activeInspections.delete(controller));
     };
 
@@ -250,6 +276,7 @@ function createMainCaptureInstallation(environment, options = {}) {
         if (stopped) return false;
         stopped = true;
         routeState = null;
+        pendingBatches.length = 0;
         abortInspections();
         restoreInstalledHooks();
         return true;

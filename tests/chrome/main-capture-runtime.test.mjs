@@ -106,7 +106,7 @@ test('MAIN capture stop restores wrappers and suppresses deferred extraction', a
     assert.deepEqual(messages, []);
 });
 
-test('MAIN capture rejects an in-flight response after an A to B to A route generation change', async () => {
+test('MAIN capture holds a preloaded response across navigation and delivers it under the next route state', async () => {
     const { environment, messages, routeListeners } = fixture();
     let release;
     environment.fetch = () => new Promise((resolve) => { release = resolve; });
@@ -126,7 +126,19 @@ test('MAIN capture rejects an in-flight response after an A to B to A route gene
     }));
     await pending;
     await new Promise((resolve) => setTimeout(resolve, 0));
+    // Nothing leaves the page world until the isolated world announces the
+    // route state the batch must be labelled with.
     assert.deepEqual(messages, []);
+
+    const nextGeneration = 'fedcba9876543210fedcba9876543210';
+    assert.equal(capture.setRouteState({
+        sourceRouteKey: 'https://www.threads.com/',
+        sourceRouteGeneration: nextGeneration
+    }), true);
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].sourceRouteGeneration, nextGeneration);
+    assert.equal(messages[0].sourceRouteKey, 'https://www.threads.com/');
+    assert.deepEqual(messages[0].records.map((record) => [record.postId, record.type]), [['POST_1', 'video']]);
 
     capture.stop();
     assert.equal(environment.history.pushState, nativePushState);
@@ -338,4 +350,34 @@ test('MAIN capture controller ownership survives page key tampering and reuses o
     assert.equal(controller.revoked, true);
     assert.equal(installMainCapture(environment), null);
     assert.equal(controller.install(), false);
+});
+
+test('MAIN capture queues responses that finish before the first route state and drops them on stop', async () => {
+    const body = JSON.stringify({
+        code: 'POST_1',
+        video_versions: [{ url: 'https://video.cdninstagram.com/video.mp4' }]
+    });
+    const respond = () => new Response(body, { status: 200, headers: { 'content-type': 'text/javascript; charset=utf-8' } });
+
+    const first = fixture();
+    first.environment.fetch = async () => respond();
+    const capture = installMainCapture(first.environment);
+    await first.environment.fetch('https://www.threads.com/graphql/query', {
+        method: 'POST',
+        body: 'fb_api_req_friendly_name=BarcelonaPostPageDownwardQuery'
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(first.messages, []);
+    assert.equal(capture.setRouteState(initialRouteState), true);
+    assert.equal(first.messages.length, 1);
+    assert.equal(first.messages[0].operationId, 'BarcelonaPostPageDownwardQuery');
+
+    const second = fixture();
+    second.environment.fetch = async () => respond();
+    const stoppedCapture = installMainCapture(second.environment);
+    await second.environment.fetch(feedUrl);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    stoppedCapture.stop();
+    assert.equal(stoppedCapture.setRouteState(initialRouteState), false);
+    assert.deepEqual(second.messages, []);
 });

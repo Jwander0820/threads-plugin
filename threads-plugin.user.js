@@ -3,7 +3,7 @@
 // @name:zh-TW   Threads Plugin
 // @name:en      Threads Plugin
 // @namespace    https://github.com/Jwander0820
-// @version      5.3.4
+// @version      5.3.5
 // @description  Download images and videos from Threads posts, select media in batches, copy post text, and copy links with tracking parameters removed.
 // @description:zh-TW 為 Threads 貼文提供圖片與影片下載、批次資源選擇、貼文文字複製，以及去除追蹤碼的連結複製功能。
 // @description:en Download images and videos from Threads posts, select media in batches, copy post text, and copy links with tracking parameters removed.
@@ -345,6 +345,40 @@
       return null;
     }
   }
+  function parseMediaViewerPostInfo(url, baseUrl = globalThis.location?.href || "https://www.threads.com/") {
+    try {
+      const parsed = new URL(String(url || ""), baseUrl);
+      const match = parsed.pathname.match(/^(\/@[^/]+\/post\/[^/]+)\/media\/?$/);
+      if (!match) return null;
+      return parsePostInfoFromUrl(`${parsed.origin}${match[1]}`, baseUrl);
+    } catch {
+      return null;
+    }
+  }
+  function buildPostRefetchUrl(postInfo, pageUrl = globalThis.location?.href || "https://www.threads.com/") {
+    const author = String(postInfo?.author || "");
+    const postId = normalizePostIdentity(postInfo?.postId);
+    if (!postId || postId.length < 5 || !/^[A-Za-z0-9._]{1,30}$/.test(author)) return null;
+    let origin;
+    try {
+      origin = new URL(pageUrl).origin;
+    } catch {
+      return null;
+    }
+    const url = `${origin}/@${author}/post/${postId}`;
+    return parsePostInfoFromUrl(url, pageUrl)?.postId === postId ? url : null;
+  }
+  function extractInlineJsonScriptTexts(html, { maxScripts = 400, maxScriptLength = Infinity } = {}) {
+    if (typeof html !== "string" || !html) return [];
+    const texts = [];
+    const pattern = /<script\b[^>]*\btype\s*=\s*["']application\/json["'][^>]*>([\s\S]*?)<\/script\s*>/gi;
+    let match;
+    while ((match = pattern.exec(html)) && texts.length < maxScripts) {
+      const text = match[1];
+      if (text && text.length <= maxScriptLength) texts.push(text);
+    }
+    return texts;
+  }
   function isLikelyPostCode(value) {
     return typeof value === "string" && /^[A-Za-z0-9_-]{5,32}$/.test(value) && !/^\d+$/.test(value);
   }
@@ -432,7 +466,7 @@
         if (["author", "owner", "profile", "user"].includes(key)) return;
         const crossesPostBoundary = /(?:parent_post|quoted|reply_to|repost)/i.test(key);
         const childPostCode = crossesPostBoundary ? null : nextPostCode;
-        const childPreservesDuplicateSlots = !crossesPostBoundary && (preserveDuplicateSlots || key === "carousel_media");
+        const childPreservesDuplicateSlots = !crossesPostBoundary && (preserveDuplicateSlots || key === "carousel_media" || key === "linked_inline_media");
         visit(child, childPostCode, depth + 1, childPreservesDuplicateSlots);
       });
     };
@@ -1373,6 +1407,13 @@
     "BarcelonaTimelineQuery"
   ]);
   var INSPECTABLE_NETWORK_OPERATIONS = new Set(CAPTURE_OPERATION_ALLOWLIST);
+  var CAPTURE_OPERATION_FAMILY_PATTERN = /^Barcelona[A-Za-z0-9]{0,60}(?:Feed|PostPage|Thread|Profile|Search|Timeline|RelatedPosts)[A-Za-z0-9]{0,60}Query$/;
+  var CAPTURE_OPERATION_EXCLUDED_PATTERN = /Account|Activity|Draft|Inbox|Insight|Login|Message|Notification|Privacy|Security|Setting/i;
+  function isAllowedCaptureOperation(operation) {
+    if (typeof operation !== "string" || operation.length > 120) return false;
+    if (INSPECTABLE_NETWORK_OPERATIONS.has(operation)) return true;
+    return CAPTURE_OPERATION_FAMILY_PATTERN.test(operation) && !CAPTURE_OPERATION_EXCLUDED_PATTERN.test(operation);
+  }
   var CAPTURE_HOSTS = /* @__PURE__ */ new Set([
     "threads.com",
     "www.threads.com",
@@ -1502,7 +1543,7 @@
       };
     }
     const [operation] = declaredOperations;
-    if (!INSPECTABLE_NETWORK_OPERATIONS.has(operation)) {
+    if (!isAllowedCaptureOperation(operation)) {
       return { allowed: false, reason: "unknown_operation", operation };
     }
     return {
@@ -1515,7 +1556,7 @@
   }
   function isInspectableResponseMime(contentType) {
     const baseType = String(contentType || "").split(";", 1)[0].trim().toLowerCase();
-    return baseType === "application/json" || baseType.endsWith("+json") || baseType === "text/plain";
+    return baseType === "application/json" || baseType.endsWith("+json") || baseType === "text/plain" || baseType === "text/javascript" || baseType === "application/javascript" || baseType === "application/x-javascript";
   }
   function getContentLength(headers) {
     const value = Number(getHeaderValue(headers, "content-length"));
@@ -1774,7 +1815,7 @@
     downloadCompleted: "Download completed: {filename}",
     downloadFailed: "Download failed. Please retry or open the post link manually.",
     resolvingVideoUrl: "Resolving video URL...",
-    videoUrlNotFound: "Cannot find the video URL yet. Play the video once, then try again.",
+    videoUrlNotFound: "Could not get the video URL. Open the post or reload the page, then try again.",
     downloadMedia: "Download this Threads media",
     cleanLinkMenuLabel: "Clean Link",
     cleanLinkAction: "Copy link with tracking parameters removed",
@@ -1834,7 +1875,7 @@
     downloadCompleted: "下載完成：{filename}",
     downloadFailed: "下載失敗，請重試或手動開啟貼文連結。",
     resolvingVideoUrl: "正在解析影片 URL…",
-    videoUrlNotFound: "尚未找到影片 URL，請先播放一次影片再重試。",
+    videoUrlNotFound: "無法取得影片網址，請點進該貼文或重新整理頁面後再試一次。",
     downloadMedia: "下載這個 Threads 媒體",
     cleanLinkMenuLabel: "原始連結",
     cleanLinkAction: "複製去除追蹤碼的連結",
@@ -1916,6 +1957,9 @@
     const BLOB_DOWNLOAD_WATCHDOG_MS = 15 * 60 * 1e3;
     const SHARE_CONTEXT_TIMEOUT_MS = 12e3;
     const USER_ACTIVATION_TOKEN_MAX_AGE_MS = 10 * 60 * 1e3;
+    const POST_REFETCH_TIMEOUT_MS = 1e4;
+    const POST_REFETCH_COOLDOWN_MS = 3e4;
+    const POST_REFETCH_MAX_CHARS = 6 * 1024 * 1024;
     const trustedActivationTokens = /* @__PURE__ */ new WeakSet();
     const USER_OPTIONS = { ...normalizeOptions(initialOptions || DEFAULT_OPTIONS) };
     let started = false;
@@ -1928,6 +1972,7 @@
       videoUrlsByPostId: /* @__PURE__ */ new Map(),
       imageUrlsByPostId: /* @__PURE__ */ new Map(),
       structuredMediaItemsByPostId: /* @__PURE__ */ new Map(),
+      postRefetches: /* @__PURE__ */ new Map(),
       captureRouteGeneration: "",
       scannedScriptContents: /* @__PURE__ */ new WeakMap(),
       mediaRouteKey: "",
@@ -2570,11 +2615,62 @@
         urls.push(source.src, source.getAttribute("src"));
       });
       const postContext = findPostContext(contextElement || video);
-      return selectPostBoundVideoUrl({
+      const boundUrl = selectPostBoundVideoUrl({
         directUrls: urls,
         postId: postContext?.postId,
         videoUrlsByPostId: state.videoUrlsByPostId
       });
+      if (boundUrl) return boundUrl;
+      const structuredVideos = getStructuredPostVideos(postContext?.postId);
+      if (structuredVideos.length === 1) return structuredVideos[0].url;
+      if (structuredVideos.length === 0) return null;
+      const posterUrls = [
+        video.poster,
+        contextElement?.tagName === "IMG" ? resolveImageUrl(contextElement) : null,
+        // In a page carousel Threads keeps each slot's poster image
+        // mounted directly underneath its blob: player.
+        findOverlappingPosterUrl(video)
+      ].filter(Boolean);
+      const posterMatches = structuredVideos.filter((item) => item.previewUrl && posterUrls.some((poster) => areMediaUrlsEquivalent(poster, item.previewUrl)));
+      if (posterMatches.length === 1) return posterMatches[0].url;
+      if (posterMatches.length > 1) return null;
+      return pickViewerSlotVideoUrl(video, postContext?.postId);
+    }
+    function findOverlappingPosterUrl(video) {
+      let node = video.parentElement;
+      for (let depth = 0; node && depth < 6; depth += 1, node = node.parentElement) {
+        const images = Array.from(node.querySelectorAll?.("img") || []);
+        if (images.length) return findVideoPreviewImage(video, images);
+      }
+      return null;
+    }
+    function pickViewerSlotVideoUrl(video, postId) {
+      const identity = postId && postId !== "unknown" ? normalizePostIdentity(postId) : null;
+      if (!identity || !parseMediaViewerPostInfo(location.href)) return null;
+      let viewer = null;
+      for (let node = video.closest?.('dialog,[role="dialog"]'); node; node = node.parentElement?.closest?.('dialog,[role="dialog"]')) {
+        viewer = node;
+      }
+      if (!viewer) return null;
+      const slots = state.structuredMediaItemsByPostId.get(identity) || [];
+      const slides = Array.from(viewer.querySelectorAll?.("img, video") || []).map((element) => ({ element, rect: element.getBoundingClientRect() })).filter(({ rect }) => rect.width >= MIN_MEDIA_SIZE && rect.height >= MIN_MEDIA_SIZE).sort((first, second) => first.rect.left - second.rect.left);
+      if (slots.length < 2 || slides.length !== slots.length) return null;
+      const aligned = slides.every(({ element }, index) => element.tagName === "VIDEO" === (slots[index].type === "video") && (element.tagName === "VIDEO" || areMediaUrlsEquivalent(resolveImageUrl(element), slots[index].url)));
+      if (!aligned) return null;
+      const slot = slots[slides.findIndex(({ element }) => element === video)];
+      return slot?.type === "video" && validateMediaUrl(slot.url, "video").ok ? slot.url : null;
+    }
+    function getStructuredPostVideos(postId) {
+      const identity = postId && postId !== "unknown" ? normalizePostIdentity(postId) : null;
+      if (!identity) return [];
+      return (state.structuredMediaItemsByPostId.get(identity) || []).filter((item) => item.type === "video" && validateMediaUrl(item.url, "video").ok);
+    }
+    function getSinglePostVideoUrl(postId) {
+      const structuredVideos = getStructuredPostVideos(postId);
+      if (structuredVideos.length === 1) return structuredVideos[0].url;
+      if (structuredVideos.length > 1) return null;
+      const urls = state.videoUrlsByPostId.get(postId) || [];
+      return urls.length === 1 ? urls[0] : null;
     }
     function findPostInfoInNode(node) {
       if (node.matches?.('a[href*="/post/"]')) {
@@ -2657,7 +2753,23 @@
       if (pageInfo?.postId && info.postId === pageInfo.postId && !getOwnedDetailPostFallback(element, detailRoot, pageInfo)) return null;
       return info;
     }
+    function getMediaViewerPostContext(element) {
+      if (!element?.closest?.('dialog,[role="dialog"]')) return null;
+      const viewerInfo = parseMediaViewerPostInfo(location.href);
+      if (!viewerInfo) return null;
+      let timeNode = null;
+      try {
+        timeNode = document.querySelector?.(
+          `a[href$="/post/${viewerInfo.postId}"] time[datetime]`
+        ) || null;
+      } catch (error) {
+        timeNode = null;
+      }
+      return { ...viewerInfo, createdAt: timeNode ? findPostTimeInNode(timeNode) : null };
+    }
     function findPostContext(element) {
+      const viewerContext = getMediaViewerPostContext(element);
+      if (viewerContext) return viewerContext;
       let nearestTime = null;
       let node = element;
       const pageInfo = parsePostInfoFromUrl(location.href);
@@ -3137,6 +3249,57 @@
       } catch (error) {
       }
     }
+    function hasStructuredPostMedia(postId) {
+      const identity = postId && postId !== "unknown" ? normalizePostIdentity(postId) : null;
+      return Boolean(identity) && (state.structuredMediaItemsByPostId.get(identity) || []).length > 0;
+    }
+    function refetchPostMedia(postInfo) {
+      const postId = normalizePostIdentity(postInfo?.postId);
+      const fetchPage = window?.fetch;
+      if (stopped || !postId || postId === "unknown" || typeof fetchPage !== "function" || isSensitiveThreadsRoute(location.href)) return Promise.resolve(false);
+      const url = buildPostRefetchUrl(postInfo, location.href);
+      if (!url) return Promise.resolve(false);
+      const now = Date.now();
+      const previous = state.postRefetches.get(postId);
+      if (previous?.promise) return previous.promise;
+      if (previous && now - previous.finishedAt < POST_REFETCH_COOLDOWN_MS) return Promise.resolve(false);
+      const controller = new AbortController();
+      const lifecycleSignal = state.lifecycleController.signal;
+      const abort = () => controller.abort();
+      lifecycleSignal.addEventListener?.("abort", abort, { once: true });
+      const timer = window.setTimeout(abort, POST_REFETCH_TIMEOUT_MS);
+      const promise = (async () => {
+        try {
+          state.diagnostics.postRefetches = (state.diagnostics.postRefetches || 0) + 1;
+          const response = await fetchPage.call(window, url, {
+            method: "GET",
+            credentials: "include",
+            // Without a document-style Accept header Threads answers
+            // with a shell page that omits the post data.
+            headers: { accept: "text/html,application/xhtml+xml" },
+            signal: controller.signal
+          });
+          if (stopped || !response?.ok) return false;
+          if (response.url && parsePostInfoFromUrl(response.url, location.href)?.postId !== postId) return false;
+          const contentType = String(response.headers?.get?.("content-type") || "").split(";", 1)[0].trim().toLowerCase();
+          if (contentType !== "text/html") return false;
+          const html = await response.text();
+          if (stopped || controller.signal.aborted || html.length > POST_REFETCH_MAX_CHARS || isSensitiveThreadsRoute(location.href)) return false;
+          extractInlineJsonScriptTexts(html, { maxScriptLength: NETWORK_RESPONSE_MAX_BYTES }).filter((text) => /video_versions|image_versions|carousel_media/.test(text)).forEach((text) => extractVideoUrlsFromText(text));
+          return hasStructuredPostMedia(postId);
+        } catch (error) {
+          return false;
+        } finally {
+          window.clearTimeout(timer);
+          lifecycleSignal.removeEventListener?.("abort", abort);
+          state.postRefetches.delete(postId);
+          state.postRefetches.set(postId, { promise: null, finishedAt: Date.now() });
+          trimMapToSize(state.postRefetches, 160);
+        }
+      })();
+      state.postRefetches.set(postId, { promise, finishedAt: 0 });
+      return promise;
+    }
     async function mediaItemFromElementWithRetry(element) {
       if (stopped) return null;
       let item = mediaItemFromElement(element);
@@ -3144,6 +3307,16 @@
       const mayBeVideo = element?.tagName === "VIDEO" || element?.tagName === "IMG" && isLikelyVideoThumbnail(element);
       if (!mayBeVideo) return null;
       toast(message("resolvingVideoUrl"));
+      const postContext = findPostContext(element);
+      if (await refetchPostMedia(postContext)) {
+        if (stopped) return null;
+        item = mediaItemFromElement(element);
+        if (item) return item;
+      }
+      if (stopped) return null;
+      const associatedVideo = getAssociatedVideoElement(element);
+      const playerSrc = associatedVideo?.currentSrc || associatedVideo?.src || "";
+      if (/^blob:/i.test(playerSrc)) return null;
       await nudgeVideoLoading(element);
       for (let attempt = 0; attempt < 10; attempt += 1) {
         await new Promise((resolve) => window.setTimeout(resolve, 250));
@@ -3603,18 +3776,18 @@
       return element.parentElement || element;
     }
     function pickMappedVideoUrlForThumbnail(img, postContext) {
-      const urls = state.videoUrlsByPostId.get(postContext.postId) || [];
-      if (urls.length === 0) return null;
+      const singleUrl = getSinglePostVideoUrl(postContext.postId);
+      if (!singleUrl) return null;
       const root = findPostRoot(img);
       const thumbnails = Array.from(root.querySelectorAll?.("img") || []).filter(isLikelyPostImage).filter(isLikelyVideoThumbnail);
-      if (urls.length === 1 && thumbnails.length <= 1 && thumbnails.includes(img)) {
-        return urls[0];
+      if (thumbnails.length <= 1 && thumbnails.includes(img)) {
+        return singleUrl;
       }
       return null;
     }
     function pickMappedVideoUrlForSurface(surface, postContext) {
-      const urls = state.videoUrlsByPostId.get(postContext.postId) || [];
-      if (urls.length === 0) return null;
+      const singleUrl = getSinglePostVideoUrl(postContext.postId);
+      if (!singleUrl) return null;
       const root = findPostRoot(surface);
       const surfaceRect = surface.getBoundingClientRect();
       const surfaces = [
@@ -3623,8 +3796,8 @@
       ];
       const uniqueSurfaces = surfaces.filter((item, index) => surfaces.indexOf(item) === index).map((item) => ({ item, rect: item.getBoundingClientRect() })).sort((a, b) => a.rect.top - b.rect.top || a.rect.left - b.rect.left);
       const matchingSurfaces = uniqueSurfaces.filter(({ rect }) => rectsOverlap(surfaceRect, rect));
-      if (urls.length === 1 && uniqueSurfaces.length <= 1 && matchingSurfaces.length === 1) {
-        return urls[0];
+      if (uniqueSurfaces.length <= 1 && matchingSurfaces.length === 1) {
+        return singleUrl;
       }
       return null;
     }
@@ -3913,7 +4086,7 @@
         const clearIntervalFn = typeof window !== "undefined" ? window.clearInterval : clearInterval;
         clearIntervalFn(context.routeTimer);
       }
-      context?.cleanItem?.remove?.();
+      (context?.cleanSlot || context?.cleanItem)?.remove?.();
       state.pendingShareContext = null;
       return reason;
     }
@@ -4123,11 +4296,24 @@
         if (state.pendingShareContext !== context) return;
         closeNativeShareMenu(context, cleanItem);
       }, true);
+      let nativeSlot = nativeItem;
+      let cleanSlot = cleanItem;
+      for (let depth = 0; depth < 4; depth += 1) {
+        const parent = nativeSlot.parentElement;
+        if (!parent || parent === menuContainer || parent.children.length !== 1) break;
+        const wrapper = parent.cloneNode(false);
+        wrapper.removeAttribute("id");
+        wrapper.classList.add(CLEAN_LINK_MENU_CLASS);
+        wrapper.append(cleanSlot);
+        cleanSlot = wrapper;
+        nativeSlot = parent;
+      }
       context.menuContainer = menuContainer;
-      context.menuItemParent = nativeItem.parentElement;
       context.nativeItem = nativeItem;
       context.cleanItem = cleanItem;
-      nativeItem.before(cleanItem);
+      context.cleanSlot = cleanSlot;
+      nativeSlot.before(cleanSlot);
+      context.menuItemParent = cleanItem.parentElement;
       return true;
     }
     function scheduleCleanLinkMenuInjection(attempt) {
@@ -4538,6 +4724,12 @@
           blockEvent(event);
           if (!createUserActivationToken(event)) return;
           openPostMediaModal();
+          const pagePostInfo = getCurrentDetailPostInfo();
+          if (pagePostInfo && !hasStructuredPostMedia(pagePostInfo.postId)) {
+            void refetchPostMedia(pagePostInfo).then((found) => {
+              if (found && !stopped) refreshOpenPostMediaModal();
+            });
+          }
         }, true);
         state.detailButton = button;
       } else if (!isBatchMediaDownloadEnabled()) {
@@ -4787,9 +4979,6 @@
         hideHoverButton();
         cancelBatchWork();
         state.diagnostics.routeTransitions += 1;
-        state.videoUrlsByPostId.clear();
-        state.imageUrlsByPostId.clear();
-        state.structuredMediaItemsByPostId.clear();
         state.postCounters.clear();
         state.modalItems = [];
         clearNativeShareContext("route_change");
@@ -5103,7 +5292,10 @@
               inspectResponse(response, captureContext, {
                 extractor: extractVideoUrlsFromText,
                 signal: state.lifecycleController.signal,
-                shouldContinue: () => !stopped && !isSensitiveThreadsRoute(location.href) && captureContext.sourceRouteGeneration === routeGeneration && captureContext.sourceRouteKey === getMediaRouteKey()
+                // Threads preloads the destination page's query
+                // before the route commits; records stay valid
+                // because they are bound to their post code.
+                shouldContinue: () => !stopped && !isSensitiveThreadsRoute(location.href)
               }).catch(() => {
               });
             }
@@ -5161,7 +5353,7 @@
               inspectXhrResponse(this, captureContext, {
                 extractor: extractVideoUrlsFromText,
                 signal: state.lifecycleController.signal,
-                shouldContinue: () => !stopped && !isSensitiveThreadsRoute(location.href) && captureContext.sourceRouteGeneration === routeGeneration && captureContext.sourceRouteKey === getMediaRouteKey()
+                shouldContinue: () => !stopped && !isSensitiveThreadsRoute(location.href)
               }).catch(() => {
               });
             };
@@ -5270,6 +5462,7 @@
       extractVideoUrlsFromText,
       finalizeModalItems,
       findPostContext,
+      resolveVideoUrl,
       findBestPostInfoInNode,
       findNativeShareMenuContainer,
       findShareSvgFromEvent,
@@ -5324,6 +5517,8 @@
       scheduleRefresh,
       selectPostBoundVideoUrl,
       syncMediaRouteScope,
+      refetchPostMedia,
+      mediaItemFromElementWithRetry,
       transitionMediaRouteScope,
       validateMediaUrl
     });
@@ -5422,6 +5617,7 @@
       state.videoUrlsByPostId.clear();
       state.imageUrlsByPostId.clear();
       state.structuredMediaItemsByPostId.clear();
+      state.postRefetches.clear();
       return true;
     }
     async function updateOptions(nextOptions) {
@@ -5665,7 +5861,7 @@
   }
   if (!IS_NODE_RUNTIME) {
     bootstrapUserscript().then(() => {
-      console.log("[Threads Target Downloader]", "v5.3.4 loaded");
+      console.log("[Threads Target Downloader]", "v5.3.5 loaded");
     }).catch((error) => {
       console.error("[Threads Target Downloader]", "bootstrap failed", error);
     });

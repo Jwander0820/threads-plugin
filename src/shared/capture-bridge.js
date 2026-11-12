@@ -1,7 +1,7 @@
 import { validateMediaUrl } from './media-policy.js';
 import { normalizePostIdentity } from './post-model.js';
 import { buildMediaRouteKey } from './route-media-state.js';
-import { CAPTURE_OPERATION_ALLOWLIST } from './network-policy.js';
+import { isAllowedCaptureOperation } from './network-policy.js';
 
 export const CAPTURE_BRIDGE_MARKER = 'threads-plugin-capture';
 export const CAPTURE_BRIDGE_VERSION = 1;
@@ -11,7 +11,7 @@ export const CAPTURE_BRIDGE_MAX_MESSAGES_PER_WINDOW = 256;
 export const CAPTURE_BRIDGE_MESSAGE_WINDOW_MS = 60_000;
 export const CAPTURE_BRIDGE_MAX_REPLAY_IDS = 256;
 
-const ALLOWED_OPERATIONS = new Set(CAPTURE_OPERATION_ALLOWLIST);
+const ALLOWED_OPERATIONS = Object.freeze({ has: isAllowedCaptureOperation });
 const PAYLOAD_KEYS = Object.freeze([
     'marker', 'messageId', 'operationId', 'records', 'sourceRouteGeneration',
     'sourceRouteKey', 'type', 'version'

@@ -3,6 +3,8 @@ import test from 'node:test';
 
 import {
     classifyNetworkCaptureRequest,
+    isAllowedCaptureOperation,
+    isInspectableResponseMime,
     inspectResponse,
     inspectXhrResponse,
     isSensitiveThreadsRoute,
@@ -176,4 +178,45 @@ test('response inspection abort signal cancels a pending stream reader', async (
     ]), false);
     assert.equal(cancelReason, 'capture_stopped');
     assert.equal(extractions, 0);
+});
+
+test('network policy follows the live Threads query families without admitting account or messaging queries', () => {
+    for (const operation of [
+        'BarcelonaFeedDirectQuery',
+        'BarcelonaFeedPaginationDirectQuery',
+        'BarcelonaPostPageTargetQuery',
+        'BarcelonaPostPageDownwardQuery',
+        'BarcelonaPostPageUpwardQuery',
+        'BarcelonaProfileThreadsTabDirectQuery',
+        'BarcelonaProfileThreadsTabRefetchableDirectQuery',
+        'BarcelonaFeedQuery'
+    ]) {
+        assert.equal(isAllowedCaptureOperation(operation), true, operation);
+        assert.equal(classifyNetworkCaptureRequest({
+            url: 'https://www.threads.com/graphql/query',
+            method: 'POST',
+            body: 'fb_api_req_friendly_name=' + operation,
+            routeUrl: 'https://www.threads.com/'
+        }).allowed, true, operation);
+    }
+    for (const operation of [
+        'AccountSettingsQuery',
+        'BarcelonaInboxThreadQuery',
+        'BarcelonaRightPanelSelfProfileInsightsQuery',
+        'BarcelonaProfileSettingsQuery',
+        'BarcelonaFeedMutation',
+        'BarcelonaFeedQuery; DROP',
+        'xBarcelonaFeedQuery',
+        '',
+        null
+    ]) {
+        assert.equal(isAllowedCaptureOperation(operation), false, String(operation));
+    }
+});
+
+test('network policy inspects the text/javascript MIME that Threads uses for GraphQL JSON', () => {
+    assert.equal(isInspectableResponseMime('text/javascript; charset=utf-8'), true);
+    assert.equal(isInspectableResponseMime('application/json'), true);
+    assert.equal(isInspectableResponseMime('text/html'), false);
+    assert.equal(isInspectableResponseMime('video/mp4'), false);
 });

@@ -15,6 +15,22 @@ export const CAPTURE_OPERATION_ALLOWLIST = Object.freeze([
     'BarcelonaTimelineQuery'
 ]);
 const INSPECTABLE_NETWORK_OPERATIONS = new Set(CAPTURE_OPERATION_ALLOWLIST);
+// Threads renames its Relay queries often (for example FeedDirectQuery,
+// FeedPaginationDirectQuery, PostPageTargetQuery, PostPageDownwardQuery and
+// ProfileThreadsTabRefetchableDirectQuery). Accept the post-listing query
+// families by shape instead of an exact list that silently goes stale, and
+// keep account-, messaging- and analytics-style queries excluded.
+const CAPTURE_OPERATION_FAMILY_PATTERN =
+    /^Barcelona[A-Za-z0-9]{0,60}(?:Feed|PostPage|Thread|Profile|Search|Timeline|RelatedPosts)[A-Za-z0-9]{0,60}Query$/;
+const CAPTURE_OPERATION_EXCLUDED_PATTERN =
+    /Account|Activity|Draft|Inbox|Insight|Login|Message|Notification|Privacy|Security|Setting/i;
+
+export function isAllowedCaptureOperation(operation) {
+    if (typeof operation !== 'string' || operation.length > 120) return false;
+    if (INSPECTABLE_NETWORK_OPERATIONS.has(operation)) return true;
+    return CAPTURE_OPERATION_FAMILY_PATTERN.test(operation) &&
+        !CAPTURE_OPERATION_EXCLUDED_PATTERN.test(operation);
+}
 const CAPTURE_HOSTS = new Set([
     'threads.com', 'www.threads.com', 'threads.net', 'www.threads.net',
     'instagram.com', 'www.instagram.com'
@@ -153,7 +169,7 @@ export function classifyNetworkCaptureRequest({ url, method = 'GET', headers, bo
         };
     }
     const [operation] = declaredOperations;
-    if (!INSPECTABLE_NETWORK_OPERATIONS.has(operation)) {
+    if (!isAllowedCaptureOperation(operation)) {
         return { allowed: false, reason: 'unknown_operation', operation };
     }
     return {
@@ -167,7 +183,11 @@ export function classifyNetworkCaptureRequest({ url, method = 'GET', headers, bo
 
 export function isInspectableResponseMime(contentType) {
     const baseType = String(contentType || '').split(';', 1)[0].trim().toLowerCase();
-    return baseType === 'application/json' || baseType.endsWith('+json') || baseType === 'text/plain';
+    // Threads serves its GraphQL JSON as text/javascript. The body is only ever
+    // handed to JSON.parse, never evaluated.
+    return baseType === 'application/json' || baseType.endsWith('+json') || baseType === 'text/plain' ||
+        baseType === 'text/javascript' || baseType === 'application/javascript' ||
+        baseType === 'application/x-javascript';
 }
 
 function getContentLength(headers) {

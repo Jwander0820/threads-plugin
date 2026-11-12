@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [5.3.5] - 2026-11-12
+
+### Fixed
+
+- Resolve video URLs reliably without reloading. Logged-in Threads plays video through `blob:` URLs, so the download URL can only come from structured post data. Post-bound media records now survive SPA navigation (still capped at 160 posts and 32 URLs per post) instead of being cleared on every route change, and a post whose single video is cached under several signed CDN URLs resolves through its structured record.
+- Advanced network capture now matches live Threads traffic: GraphQL JSON served as `text/javascript` is inspected, the current query families (for example `BarcelonaFeedPaginationDirectQuery`, `BarcelonaPostPageTargetQuery`, `BarcelonaProfileThreadsTabRefetchableDirectQuery`) are recognized by shape while account, messaging and insights queries stay excluded, and a response preloaded before a navigation commits is kept and delivered under the next route state rather than discarded. Sensitive routes still stop inspection.
+- When a user asks for a video the page data does not hold, re-request that post's own permalink once (same origin, at most one request per post per 30 seconds, never on sensitive routes) and read its inline JSON, then continue the download. Both products do this only after a click on a download control.
+- Replace the outdated "play the video once" hint, which cannot help with `blob:` playback, with guidance that works (open the post or reload), and stop reloading `blob:`-backed players while resolving.
+- Resolve videos embedded from Instagram. A Threads post that links an Instagram reel carries the video under `linked_inline_media` with its own Instagram shortcode, so the record was filed under that shortcode and never found for the Threads post; it now keeps the Threads post identity.
+- Download videos from the fullscreen media viewer. The viewer renders in a dialog outside every post block at `/@author/post/CODE/media`, so its media could not be tied to a post and `blob:` videos had no URL to resolve; the viewer route now supplies the post identity (and the correct author, post code and timestamp for filenames).
+- Keep the "Clean Link" share action in its own cell. The share sheet now lays actions out in a row with one wrapper per action, and the injected item was stacked inside the native "Copy link" cell; it now mirrors the wrapper and sits beside it.
+- Resolve the right video from the floating button on multi-video posts: on the page by the poster image mounted under each `blob:` player, and in the fullscreen viewer by slide position, used only when every mounted slide agrees with the structured record slot for slot. Any mismatch leaves the previous behaviour (no download) unchanged.
+
+### Changed
+
+- Update the packaged privacy policy, both locale catalogs, the store listing, and the security review to describe the operation-family check, post-bound media retention across in-site navigation, and the user-initiated same-origin post-page lookup.
+
 ## [5.3.4] - 2026-11-08
 
 ### Fixed

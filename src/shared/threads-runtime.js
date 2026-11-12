@@ -32,9 +32,12 @@ import { DEFAULT_OPTIONS, normalizeOptions } from './options.js';
 import { createMessageFormatter } from './i18n.js';
 import { SHARED_UI_MESSAGES } from './i18n-messages.js';
 import {
+    buildPostRefetchUrl,
     collectStructuredMediaUrls,
+    extractInlineJsonScriptTexts,
     mergeStructuredMediaRecords,
     normalizePostIdentity,
+    parseMediaViewerPostInfo,
     parsePostInfoFromUrl,
     sanitizeFilenamePart
 } from './post-model.js';
@@ -84,6 +87,9 @@ export async function createThreadsRuntime({
     const BLOB_DOWNLOAD_WATCHDOG_MS = 15 * 60 * 1000;
     const SHARE_CONTEXT_TIMEOUT_MS = 12000;
     const USER_ACTIVATION_TOKEN_MAX_AGE_MS = 10 * 60 * 1000;
+    const POST_REFETCH_TIMEOUT_MS = 10000;
+    const POST_REFETCH_COOLDOWN_MS = 30000;
+    const POST_REFETCH_MAX_CHARS = 6 * 1024 * 1024;
     const trustedActivationTokens = new WeakSet();
 
     const USER_OPTIONS = { ...normalizeOptions(initialOptions || DEFAULT_OPTIONS) };
@@ -98,6 +104,7 @@ export async function createThreadsRuntime({
         videoUrlsByPostId: new Map(),
         imageUrlsByPostId: new Map(),
         structuredMediaItemsByPostId: new Map(),
+        postRefetches: new Map(),
         captureRouteGeneration: '',
         scannedScriptContents: new WeakMap(),
         mediaRouteKey: '',
@@ -765,11 +772,83 @@ export async function createThreadsRuntime({
         });
 
         const postContext = findPostContext(contextElement || video);
-        return selectPostBoundVideoUrl({
+        const boundUrl = selectPostBoundVideoUrl({
             directUrls: urls,
             postId: postContext?.postId,
             videoUrlsByPostId: state.videoUrlsByPostId
         });
+        if (boundUrl) return boundUrl;
+
+        // Logged-in Threads plays through blob: URLs, and the same video can be
+        // cached under several signed CDN URLs. Fall back to the structured
+        // post record: a lone video, or the slot whose poster matches.
+        const structuredVideos = getStructuredPostVideos(postContext?.postId);
+        if (structuredVideos.length === 1) return structuredVideos[0].url;
+        if (structuredVideos.length === 0) return null;
+        const posterUrls = [
+            video.poster,
+            contextElement?.tagName === 'IMG' ? resolveImageUrl(contextElement) : null,
+            // In a page carousel Threads keeps each slot's poster image
+            // mounted directly underneath its blob: player.
+            findOverlappingPosterUrl(video)
+        ].filter(Boolean);
+        const posterMatches = structuredVideos.filter((item) => item.previewUrl &&
+            posterUrls.some((poster) => areMediaUrlsEquivalent(poster, item.previewUrl)));
+        if (posterMatches.length === 1) return posterMatches[0].url;
+        if (posterMatches.length > 1) return null;
+        return pickViewerSlotVideoUrl(video, postContext?.postId);
+    }
+
+    function findOverlappingPosterUrl(video) {
+        let node = video.parentElement;
+        for (let depth = 0; node && depth < 6; depth += 1, node = node.parentElement) {
+            const images = Array.from(node.querySelectorAll?.('img') || []);
+            if (images.length) return findVideoPreviewImage(video, images);
+        }
+        return null;
+    }
+
+    // The fullscreen viewer mounts every carousel slide side by side and gives
+    // players no poster. Map by slide position, but only when the slides match
+    // the structured record slot for slot; any disagreement means "unknown".
+    function pickViewerSlotVideoUrl(video, postId) {
+        const identity = postId && postId !== 'unknown' ? normalizePostIdentity(postId) : null;
+        if (!identity || !parseMediaViewerPostInfo(location.href)) return null;
+        let viewer = null;
+        for (let node = video.closest?.('dialog,[role="dialog"]'); node;
+            node = node.parentElement?.closest?.('dialog,[role="dialog"]')) {
+            viewer = node;
+        }
+        if (!viewer) return null;
+
+        const slots = state.structuredMediaItemsByPostId.get(identity) || [];
+        const slides = Array.from(viewer.querySelectorAll?.('img, video') || [])
+            .map((element) => ({ element, rect: element.getBoundingClientRect() }))
+            .filter(({ rect }) => rect.width >= MIN_MEDIA_SIZE && rect.height >= MIN_MEDIA_SIZE)
+            .sort((first, second) => first.rect.left - second.rect.left);
+        if (slots.length < 2 || slides.length !== slots.length) return null;
+        const aligned = slides.every(({ element }, index) =>
+            (element.tagName === 'VIDEO') === (slots[index].type === 'video') &&
+            (element.tagName === 'VIDEO' ||
+                areMediaUrlsEquivalent(resolveImageUrl(element), slots[index].url)));
+        if (!aligned) return null;
+        const slot = slots[slides.findIndex(({ element }) => element === video)];
+        return slot?.type === 'video' && validateMediaUrl(slot.url, 'video').ok ? slot.url : null;
+    }
+
+    function getStructuredPostVideos(postId) {
+        const identity = postId && postId !== 'unknown' ? normalizePostIdentity(postId) : null;
+        if (!identity) return [];
+        return (state.structuredMediaItemsByPostId.get(identity) || [])
+            .filter((item) => item.type === 'video' && validateMediaUrl(item.url, 'video').ok);
+    }
+
+    function getSinglePostVideoUrl(postId) {
+        const structuredVideos = getStructuredPostVideos(postId);
+        if (structuredVideos.length === 1) return structuredVideos[0].url;
+        if (structuredVideos.length > 1) return null;
+        const urls = state.videoUrlsByPostId.get(postId) || [];
+        return urls.length === 1 ? urls[0] : null;
     }
 
     function findPostInfoInNode(node) {
@@ -898,7 +977,27 @@ export async function createThreadsRuntime({
         return info;
     }
 
+    // The fullscreen viewer renders in a dialog outside every post block, with
+    // no post link of its own; its route names the post it belongs to.
+    function getMediaViewerPostContext(element) {
+        if (!element?.closest?.('dialog,[role="dialog"]')) return null;
+        const viewerInfo = parseMediaViewerPostInfo(location.href);
+        if (!viewerInfo) return null;
+        let timeNode = null;
+        try {
+            timeNode = document.querySelector?.(
+                `a[href$="/post/${viewerInfo.postId}"] time[datetime]`
+            ) || null;
+        } catch (error) {
+            timeNode = null;
+        }
+        return { ...viewerInfo, createdAt: timeNode ? findPostTimeInNode(timeNode) : null };
+    }
+
     function findPostContext(element) {
+        const viewerContext = getMediaViewerPostContext(element);
+        if (viewerContext) return viewerContext;
+
         let nearestTime = null;
         let node = element;
         const pageInfo = parsePostInfoFromUrl(location.href);
@@ -1469,6 +1568,71 @@ export async function createThreadsRuntime({
         }
     }
 
+    function hasStructuredPostMedia(postId) {
+        const identity = postId && postId !== 'unknown' ? normalizePostIdentity(postId) : null;
+        return Boolean(identity) && (state.structuredMediaItemsByPostId.get(identity) || []).length > 0;
+    }
+
+    // Last resort when a user asks for media the passive caches do not hold:
+    // re-request that post's own permalink and read its inert inline JSON.
+    // Logged-in video plays from blob: URLs, so nothing the user does on the
+    // page (including playing the video) would otherwise surface the URL.
+    // One request per post per cooldown, only after a user action.
+    function refetchPostMedia(postInfo) {
+        const postId = normalizePostIdentity(postInfo?.postId);
+        const fetchPage = window?.fetch;
+        if (stopped || !postId || postId === 'unknown' || typeof fetchPage !== 'function' ||
+            isSensitiveThreadsRoute(location.href)) return Promise.resolve(false);
+        const url = buildPostRefetchUrl(postInfo, location.href);
+        if (!url) return Promise.resolve(false);
+
+        const now = Date.now();
+        const previous = state.postRefetches.get(postId);
+        if (previous?.promise) return previous.promise;
+        if (previous && now - previous.finishedAt < POST_REFETCH_COOLDOWN_MS) return Promise.resolve(false);
+
+        const controller = new AbortController();
+        const lifecycleSignal = state.lifecycleController.signal;
+        const abort = () => controller.abort();
+        lifecycleSignal.addEventListener?.('abort', abort, { once: true });
+        const timer = window.setTimeout(abort, POST_REFETCH_TIMEOUT_MS);
+        const promise = (async () => {
+            try {
+                state.diagnostics.postRefetches = (state.diagnostics.postRefetches || 0) + 1;
+                const response = await fetchPage.call(window, url, {
+                    method: 'GET',
+                    credentials: 'include',
+                    // Without a document-style Accept header Threads answers
+                    // with a shell page that omits the post data.
+                    headers: { accept: 'text/html,application/xhtml+xml' },
+                    signal: controller.signal
+                });
+                if (stopped || !response?.ok) return false;
+                if (response.url && parsePostInfoFromUrl(response.url, location.href)?.postId !== postId) return false;
+                const contentType = String(response.headers?.get?.('content-type') || '')
+                    .split(';', 1)[0].trim().toLowerCase();
+                if (contentType !== 'text/html') return false;
+                const html = await response.text();
+                if (stopped || controller.signal.aborted || html.length > POST_REFETCH_MAX_CHARS ||
+                    isSensitiveThreadsRoute(location.href)) return false;
+                extractInlineJsonScriptTexts(html, { maxScriptLength: NETWORK_RESPONSE_MAX_BYTES })
+                    .filter((text) => /video_versions|image_versions|carousel_media/.test(text))
+                    .forEach((text) => extractVideoUrlsFromText(text));
+                return hasStructuredPostMedia(postId);
+            } catch (error) {
+                return false;
+            } finally {
+                window.clearTimeout(timer);
+                lifecycleSignal.removeEventListener?.('abort', abort);
+                state.postRefetches.delete(postId);
+                state.postRefetches.set(postId, { promise: null, finishedAt: Date.now() });
+                trimMapToSize(state.postRefetches, 160);
+            }
+        })();
+        state.postRefetches.set(postId, { promise, finishedAt: 0 });
+        return promise;
+    }
+
     async function mediaItemFromElementWithRetry(element) {
         if (stopped) return null;
         let item = mediaItemFromElement(element);
@@ -1481,6 +1645,19 @@ export async function createThreadsRuntime({
         if (!mayBeVideo) return null;
 
         toast(message('resolvingVideoUrl'));
+        const postContext = findPostContext(element);
+        if (await refetchPostMedia(postContext)) {
+            if (stopped) return null;
+            item = mediaItemFromElement(element);
+            if (item) return item;
+        }
+        if (stopped) return null;
+
+        // Reloading a blob:-backed player cannot reveal a file URL and would
+        // only interrupt playback; the nudge is for direct-src players.
+        const associatedVideo = getAssociatedVideoElement(element);
+        const playerSrc = associatedVideo?.currentSrc || associatedVideo?.src || '';
+        if (/^blob:/i.test(playerSrc)) return null;
         await nudgeVideoLoading(element);
 
         for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -2075,23 +2252,23 @@ export async function createThreadsRuntime({
     }
 
     function pickMappedVideoUrlForThumbnail(img, postContext) {
-        const urls = state.videoUrlsByPostId.get(postContext.postId) || [];
-        if (urls.length === 0) return null;
+        const singleUrl = getSinglePostVideoUrl(postContext.postId);
+        if (!singleUrl) return null;
 
         const root = findPostRoot(img);
         const thumbnails = Array.from(root.querySelectorAll?.('img') || [])
             .filter(isLikelyPostImage)
             .filter(isLikelyVideoThumbnail);
-        if (urls.length === 1 && thumbnails.length <= 1 && thumbnails.includes(img)) {
-            return urls[0];
+        if (thumbnails.length <= 1 && thumbnails.includes(img)) {
+            return singleUrl;
         }
 
         return null;
     }
 
     function pickMappedVideoUrlForSurface(surface, postContext) {
-        const urls = state.videoUrlsByPostId.get(postContext.postId) || [];
-        if (urls.length === 0) return null;
+        const singleUrl = getSinglePostVideoUrl(postContext.postId);
+        if (!singleUrl) return null;
 
         const root = findPostRoot(surface);
         const surfaceRect = surface.getBoundingClientRect();
@@ -2104,8 +2281,8 @@ export async function createThreadsRuntime({
             .map((item) => ({ item, rect: item.getBoundingClientRect() }))
             .sort((a, b) => (a.rect.top - b.rect.top) || (a.rect.left - b.rect.left));
         const matchingSurfaces = uniqueSurfaces.filter(({ rect }) => rectsOverlap(surfaceRect, rect));
-        if (urls.length === 1 && uniqueSurfaces.length <= 1 && matchingSurfaces.length === 1) {
-            return urls[0];
+        if (uniqueSurfaces.length <= 1 && matchingSurfaces.length === 1) {
+            return singleUrl;
         }
 
         return null;
@@ -2498,7 +2675,7 @@ export async function createThreadsRuntime({
             const clearIntervalFn = typeof window !== 'undefined' ? window.clearInterval : clearInterval;
             clearIntervalFn(context.routeTimer);
         }
-        context?.cleanItem?.remove?.();
+        (context?.cleanSlot || context?.cleanItem)?.remove?.();
         state.pendingShareContext = null;
         return reason;
     }
@@ -2784,11 +2961,29 @@ export async function createThreadsRuntime({
             closeNativeShareMenu(context, cleanItem);
         }, true);
 
+        // The share sheet lays its actions out in a row and wraps each one
+        // in its own single-child cell. Inserting next to the native item
+        // would stack both inside that one cell, so mirror the cell chain
+        // and insert the copy as a sibling cell instead.
+        let nativeSlot = nativeItem;
+        let cleanSlot = cleanItem;
+        for (let depth = 0; depth < 4; depth += 1) {
+            const parent = nativeSlot.parentElement;
+            if (!parent || parent === menuContainer || parent.children.length !== 1) break;
+            const wrapper = parent.cloneNode(false);
+            wrapper.removeAttribute('id');
+            wrapper.classList.add(CLEAN_LINK_MENU_CLASS);
+            wrapper.append(cleanSlot);
+            cleanSlot = wrapper;
+            nativeSlot = parent;
+        }
+
         context.menuContainer = menuContainer;
-        context.menuItemParent = nativeItem.parentElement;
         context.nativeItem = nativeItem;
         context.cleanItem = cleanItem;
-        nativeItem.before(cleanItem);
+        context.cleanSlot = cleanSlot;
+        nativeSlot.before(cleanSlot);
+        context.menuItemParent = cleanItem.parentElement;
         return true;
     }
 
@@ -3320,6 +3515,12 @@ export async function createThreadsRuntime({
                 blockEvent(event);
                 if (!createUserActivationToken(event)) return;
                 openPostMediaModal();
+                const pagePostInfo = getCurrentDetailPostInfo();
+                if (pagePostInfo && !hasStructuredPostMedia(pagePostInfo.postId)) {
+                    void refetchPostMedia(pagePostInfo).then((found) => {
+                        if (found && !stopped) refreshOpenPostMediaModal();
+                    });
+                }
             }, true);
             state.detailButton = button;
         } else if (!isBatchMediaDownloadEnabled()) {
@@ -3631,9 +3832,11 @@ export async function createThreadsRuntime({
             hideHoverButton();
             cancelBatchWork();
             state.diagnostics.routeTransitions += 1;
-            state.videoUrlsByPostId.clear();
-            state.imageUrlsByPostId.clear();
-            state.structuredMediaItemsByPostId.clear();
+            // Media records are bound to a post code, not to a route. Threads
+            // plays logged-in video through blob: URLs and preloads the next
+            // page's data before navigating, so dropping these bounded LRU
+            // caches on every SPA navigation left videos unresolvable until a
+            // full reload re-delivered the inline data.
             state.postCounters.clear();
             state.modalItems = [];
             clearNativeShareContext('route_change');
@@ -3991,10 +4194,11 @@ export async function createThreadsRuntime({
                         inspectResponse(response, captureContext, {
                             extractor: extractVideoUrlsFromText,
                             signal: state.lifecycleController.signal,
+                            // Threads preloads the destination page's query
+                            // before the route commits; records stay valid
+                            // because they are bound to their post code.
                             shouldContinue: () => !stopped &&
-                                !isSensitiveThreadsRoute(location.href) &&
-                                captureContext.sourceRouteGeneration === routeGeneration &&
-                                captureContext.sourceRouteKey === getMediaRouteKey()
+                                !isSensitiveThreadsRoute(location.href)
                         })
                             .catch(() => { });
                     }
@@ -4058,9 +4262,7 @@ export async function createThreadsRuntime({
                             extractor: extractVideoUrlsFromText,
                             signal: state.lifecycleController.signal,
                             shouldContinue: () => !stopped &&
-                                !isSensitiveThreadsRoute(location.href) &&
-                                captureContext.sourceRouteGeneration === routeGeneration &&
-                                captureContext.sourceRouteKey === getMediaRouteKey()
+                                !isSensitiveThreadsRoute(location.href)
                         })
                             .catch(() => { });
                     };
@@ -4183,6 +4385,7 @@ export async function createThreadsRuntime({
             extractVideoUrlsFromText,
             finalizeModalItems,
             findPostContext,
+            resolveVideoUrl,
             findBestPostInfoInNode,
             findNativeShareMenuContainer,
             findShareSvgFromEvent,
@@ -4240,6 +4443,8 @@ export async function createThreadsRuntime({
             scheduleRefresh,
             selectPostBoundVideoUrl,
             syncMediaRouteScope,
+            refetchPostMedia,
+            mediaItemFromElementWithRetry,
             transitionMediaRouteScope,
             validateMediaUrl
     });
@@ -4342,6 +4547,7 @@ export async function createThreadsRuntime({
         state.videoUrlsByPostId.clear();
         state.imageUrlsByPostId.clear();
         state.structuredMediaItemsByPostId.clear();
+        state.postRefetches.clear();
         return true;
     }
 

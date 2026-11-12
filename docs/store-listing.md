@@ -28,9 +28,9 @@ Threads Plugin 在 Threads 貼文旁加入一組由使用者主動操作的匯�
 
 隱私處理採 opt-in。擴充功能在使用者同意頁面揭露前保持休眠，不掃描貼文 DOM，也不啟動網路回應擷取。啟用後，才會在本機處理目前 Threads 頁面的貼文文字、貼文 URL、公開作者名稱／識別碼、貼文代碼、媒體 URL／類型、必要 DOM 資訊，以及完成使用者操作所需的 click、pointer、scroll 與 keyboard 事件。
 
-進階網路回應擷取是另一個預設關閉的選項，必須再次確認；只檢查 allowlist 內的 feed/post GraphQL 回應，原始 response body 不會傳到 service worker、開發者或外部伺服器。使用者可獨立關閉進階擷取或撤銷全部同意；這會權威地終止並永久鎖定目前 document 的 MAIN controller，頁面程式或再次注入都無法重啟。若在同一既開分頁重新啟用進階擷取，必須 reload 或開啟新 document。
+進階網路回應擷取是另一個預設關閉的選項，必須再次確認；只檢查動態、貼文、個人檔案與搜尋這幾類貼文列表的 Threads GraphQL 回應（帳號、訊息與洞察報告類排除），原始 response body 不會傳到 service worker、開發者或外部伺服器。使用者可獨立關閉進階擷取或撤銷全部同意；這會權威地終止並永久鎖定目前 document 的 MAIN controller，頁面程式或再次注入都無法重啟。若在同一既開分頁重新啟用進階擷取，必須 reload 或開啟新 document。
 
-Threads Plugin 沒有開發者後端、analytics、廣告或追蹤，不出售資料。使用者要求下載時，Chrome 會向所選媒體原有且已核准的 Threads／Instagram／CDN host 發出必要 HTTPS 請求；複製時，所選文字或連結會寫入作業系統剪貼簿。完整說明見公開隱私政策。
+Threads Plugin 沒有開發者後端、analytics、廣告或追蹤，不出售資料。使用者要求下載時，Chrome 會向所選媒體原有且已核准的 Threads／Instagram／CDN host 發出必要 HTTPS 請求；若目前頁面沒有該貼文的媒體位址，分頁會重新請求該貼文自己的 Threads 頁面一次（同來源、每則貼文 30 秒內最多一次、敏感路徑不發出）並在本機讀出位址；複製時，所選文字或連結會寫入作業系統剪貼簿。完整說明見公開隱私政策。
 
 本擴充功能與 Meta、Instagram 或 Threads 無隸屬、背書或贊助關係。
 
@@ -72,7 +72,7 @@ After consent, the extension processes only the information needed to provide it
 
 Optional advanced media capture
 
-Advanced network-response capture is a separate option that is disabled by default and requires an additional confirmation. When enabled, it inspects only allowlisted Threads feed and post responses on supported, non-sensitive routes to improve media detection.
+Advanced network-response capture is a separate option that is disabled by default and requires an additional confirmation. When enabled, it inspects only Threads feed, post, profile, and search responses on supported, non-sensitive routes to improve media detection. Account, messaging, and insights responses are excluded.
 
 Raw response bodies are not sent to the extension service worker, the developer, or an external server. You may disable advanced capture independently or revoke all consent at any time. Re-enabling advanced capture in an already-open tab requires reloading the page or opening a new document.
 
@@ -80,7 +80,7 @@ No tracking or developer backend
 
 Threads Plugin has no developer-operated backend, analytics, advertising, or user tracking, and it does not sell user data.
 
-When you request a download, Chrome contacts the media file's existing approved Threads, Instagram, or related CDN host over HTTPS. When you copy post text or a clean link, the selected content is written to your operating-system clipboard.
+When you request a download, Chrome contacts the media file's existing approved Threads, Instagram, or related CDN host over HTTPS. If the open page does not hold that post's media address, the tab re-requests that post's own Threads page once (same origin, at most once per post per 30 seconds, never on sensitive routes) and reads the address locally. When you copy post text or a clean link, the selected content is written to your operating-system clipboard.
 
 The extension remains inactive on sensitive routes such as login, direct messages, account, privacy, security, and settings pages.
 
@@ -141,13 +141,14 @@ Dashboard certifications 全部應與程式碼及公開政策一致：
 - 不出售資料，也不移轉給無關的 analytics、廣告或追蹤服務；
 - 不用於個人化廣告、profiling、信用或貸款判定；
 - 不讓開發者或其他人員讀取使用者資料；
-- 使用者要求下載時，只有既有媒體 host 收到傳回檔案所需的 HTTPS 請求；複製內容只寫入使用者的作業系統剪貼簿；
+- 使用者要求下載時，只有既有媒體 host 收到傳回檔案所需的 HTTPS 請求；找不到媒體位址時，只會向 Threads 重新請求使用者正在瀏覽的該則貼文頁面一次；複製內容只寫入使用者的作業系統剪貼簿；
 - 遵守 Chrome Web Store User Data Policy，包括 Limited Use requirements。
 
 ## Store disclosure summary
 
 - Website content／公開作者識別碼／目前 Threads URL／必要 UI events：只在明確同意後於本機處理，以完成使用者要求。
-- 進階 allowlisted GraphQL response inspection：第二層 opt-in、預設關閉。
+- 進階 GraphQL response inspection（限動態／貼文／個人檔案／搜尋類）：第二層 opt-in、預設關閉。
+- 使用者按下載且頁面沒有媒體位址時的同來源貼文頁面重新請求：只在使用者操作後觸發，每則貼文 30 秒內最多一次。
 - 開發者收集、analytics、profiling、廣告、追蹤、資料出售：無。
 - Remote code：無。
 - Single purpose：Threads 貼文媒體下載與貼文文字／乾淨連結複製。

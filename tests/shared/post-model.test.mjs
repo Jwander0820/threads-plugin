@@ -101,3 +101,83 @@ test('structured model ignores a post-level cover duplicated by carousel_media',
         ['image', secondPhoto, 'Db5Yl8zEVFh']
     ]);
 });
+
+test('post refetch helpers build a canonical same-origin permalink and read only inert JSON scripts', async () => {
+    const { buildPostRefetchUrl, extractInlineJsonScriptTexts } = await import('../../src/shared/post-model.js');
+    const page = 'https://www.threads.com/?xmt=tracking#top';
+    assert.equal(
+        buildPostRefetchUrl({ author: 'some.user_1', postId: 'DfjT1cFj15c', postUrl: 'https://evil.example/x' }, page),
+        'https://www.threads.com/@some.user_1/post/DfjT1cFj15c'
+    );
+    for (const postInfo of [
+        { author: 'unknown/../x', postId: 'DfjT1cFj15c' },
+        { author: 'user', postId: 'unknown?x=1' },
+        { author: 'user', postId: 'abc' },
+        { author: '', postId: 'DfjT1cFj15c' },
+        null
+    ]) {
+        assert.equal(buildPostRefetchUrl(postInfo, page), null);
+    }
+    assert.equal(buildPostRefetchUrl({ author: 'user', postId: 'DfjT1cFj15c' }, 'https://attacker.example/'), null);
+
+    const html = '<html><script>alert(1)</script>' +
+        '<script type="application/json" data-sjs>{"a":1}</script>' +
+        '<script type="text/javascript">{"b":2}</script>' +
+        "<script data-x type='application/json'>{\"c\":3}</script>" +
+        '<script type="application/json">' + 'x'.repeat(50) + '</script></html>';
+    assert.deepEqual(extractInlineJsonScriptTexts(html, { maxScriptLength: 20 }), ['{"a":1}', '{"c":3}']);
+    assert.deepEqual(extractInlineJsonScriptTexts(null), []);
+});
+
+test('an embedded Instagram reel is owned by the Threads post that links it', () => {
+    const records = collectStructuredMediaUrls({
+        media: {
+            code: 'THREADS_POST',
+            media_type: 19,
+            video_versions: null,
+            text_post_app_info: {
+                share_info: { quoted_post: {
+                    code: 'QUOTED_POST',
+                    video_versions: [{ url: 'https://cdninstagram.com/quoted.mp4' }]
+                } },
+                linked_inline_media: {
+                    code: 'IG_SHORTCODE',
+                    permalink: 'https://www.instagram.com/reel/IG_SHORTCODE/',
+                    media_type: 2,
+                    image_versions2: { candidates: [{ url: 'https://cdninstagram.com/reel-poster.jpg' }] },
+                    video_versions: [
+                        { type: 101, url: 'https://instagram.ftpe8-4.fna.fbcdn.net/o1/v/reel.mp4' },
+                        { type: 102, url: 'https://instagram.ftpe8-4.fna.fbcdn.net/o1/v/reel.mp4' }
+                    ]
+                }
+            }
+        }
+    });
+    assert.deepEqual(records.filter((record) => record.postId === 'THREADS_POST'), [{
+        type: 'video',
+        url: 'https://instagram.ftpe8-4.fna.fbcdn.net/o1/v/reel.mp4',
+        postId: 'THREADS_POST',
+        previewUrl: 'https://cdninstagram.com/reel-poster.jpg'
+    }]);
+    assert.equal(records.some((record) => record.postId === 'IG_SHORTCODE'), false);
+    assert.deepEqual(records.filter((record) => record.postId === 'QUOTED_POST').map((record) => record.type), ['video']);
+});
+
+test('media viewer route names its post without being treated as a detail page', async () => {
+    const { parseMediaViewerPostInfo } = await import('../../src/shared/post-model.js');
+    const base = 'https://www.threads.com/';
+    assert.deepEqual(parseMediaViewerPostInfo('https://www.threads.com/@some.user/post/DfmYYdZjKb9/media?xmt=1', base), {
+        author: 'some.user',
+        postId: 'DfmYYdZjKb9',
+        postUrl: 'https://www.threads.com/@some.user/post/DfmYYdZjKb9'
+    });
+    assert.equal(parsePostInfoFromUrl('https://www.threads.com/@some.user/post/DfmYYdZjKb9/media', base), null);
+    for (const url of [
+        'https://www.threads.com/@some.user/post/DfmYYdZjKb9',
+        'https://www.threads.com/@some.user/post/DfmYYdZjKb9/media/extra',
+        'https://attacker.example/@some.user/post/DfmYYdZjKb9/media',
+        'https://www.threads.com/settings/media'
+    ]) {
+        assert.equal(parseMediaViewerPostInfo(url, base), null, url);
+    }
+});

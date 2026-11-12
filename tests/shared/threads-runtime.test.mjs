@@ -1825,7 +1825,7 @@ test('native share deferred close cannot click the page after runtime stop', asy
     assert.equal(clicks, 0);
 });
 
-test('performance counters prove filtered mutation refresh, one parse, route cache reset and stop cleanup', async (t) => {
+test('performance counters prove filtered mutation refresh, one parse, post-bound cache retention and stop cleanup', async (t) => {
     const originalElement = globalThis.Element;
     const originalNode = globalThis.Node;
     const originalLocation = globalThis.location;
@@ -1938,7 +1938,8 @@ test('performance counters prove filtered mutation refresh, one parse, route cac
     runtime.testing.syncMediaRouteScope();
     snapshot = runtime.testing.getPerformanceSnapshot();
     assert.equal(snapshot.routeTransitions, 1);
-    assert.equal(snapshot.imageRouteCacheEntries, 0);
+    // Post-bound media survives SPA navigation; logged-in video is blob-only.
+    assert.equal(snapshot.imageRouteCacheEntries, 1);
 
     await runtime.stop();
     snapshot = runtime.testing.getPerformanceSnapshot();
@@ -1951,7 +1952,7 @@ test('performance counters prove filtered mutation refresh, one parse, route cac
     assert.equal(intervals.size, 0);
 });
 
-test('userscript network hooks reject stale fetch and XHR captures across an A-B-A route cycle', async (t) => {
+test('userscript network hooks keep preloaded fetch and XHR captures across SPA navigation but not on sensitive routes', async (t) => {
     const originalLocation = globalThis.location;
     const routeA = 'https://www.threads.com/@author/post/POST_A';
     const routeB = 'https://www.threads.com/@author/post/POST_B';
@@ -2038,7 +2039,8 @@ test('userscript network hooks reject stale fetch and XHR captures across an A-B
     await staleFetch;
     staleXhr.dispatch('load');
     await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(runtime.testing.getPerformanceSnapshot().networkPayloadParses, 0);
+    // Threads preloads the destination query before the route commits.
+    assert.equal(runtime.testing.getPerformanceSnapshot().networkPayloadParses, 2);
 
     const preCommitNavigationFetch = targetWindow.fetch(requestUrl);
     navigationListeners.get('navigate')?.({ destination: { url: `${routeA}#media` } });
@@ -2051,7 +2053,20 @@ test('userscript network hooks reject stale fetch and XHR captures across an A-B
     });
     await preCommitNavigationFetch;
     await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(runtime.testing.getPerformanceSnapshot().networkPayloadParses, 0);
+    assert.equal(runtime.testing.getPerformanceSnapshot().networkPayloadParses, 3);
+
+    const sensitiveFetch = targetWindow.fetch(requestUrl);
+    targetWindow.history.pushState({}, '', 'https://www.threads.com/settings/privacy');
+    pendingFetches.shift()({
+        status: 200,
+        url: requestUrl,
+        headers: { get: (name) => String(name).toLowerCase() === 'content-type' ? 'application/json' : null },
+        clone() { return { body: null, text: async () => '{}' }; }
+    });
+    await sensitiveFetch;
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(runtime.testing.getPerformanceSnapshot().networkPayloadParses, 3);
+    targetWindow.history.pushState({}, '', routeA);
 
     const currentFetch = targetWindow.fetch(requestUrl);
     pendingFetches.shift()({
@@ -2066,7 +2081,7 @@ test('userscript network hooks reject stale fetch and XHR captures across an A-B
     currentXhr.send();
     currentXhr.dispatch('load');
     await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(runtime.testing.getPerformanceSnapshot().networkPayloadParses, 2);
+    assert.equal(runtime.testing.getPerformanceSnapshot().networkPayloadParses, 5);
 
     uninstall();
     assert.equal(targetWindow.fetch, nativeFetch);
@@ -2177,4 +2192,220 @@ test('clipboard feedback waits for completion and reports failures without a suc
         assert.equal(await result, outcome === 'success', outcome);
         assert.deepEqual(notices, outcome === 'success' ? ['postTextCopied'] : outcome === 'route-change' ? [] : ['copyFailed'], outcome);
     }
+});
+
+test('on-demand post refetch fills the post-bound cache once per cooldown and rejects unsafe responses', async (t) => {
+    const previousLocation = globalThis.location;
+    globalThis.location = { href: 'https://www.threads.com/' };
+    t.after(() => {
+        if (previousLocation === undefined) delete globalThis.location;
+        else globalThis.location = previousLocation;
+    });
+    const document = {
+        body: null,
+        documentElement: {},
+        addEventListener() {},
+        removeEventListener() {},
+        getElementById() { return null; },
+        querySelectorAll() { return []; }
+    };
+    const requests = [];
+    let respond;
+    const window = {
+        addEventListener() {},
+        removeEventListener() {},
+        setTimeout() { return 1; },
+        setInterval() { return 1; },
+        clearTimeout() {},
+        clearInterval() {},
+        cancelAnimationFrame() {},
+        getComputedStyle() { return { display: 'block', visibility: 'visible' }; },
+        fetch(url, init) {
+            requests.push({ url, init });
+            return Promise.resolve(respond(url));
+        }
+    };
+    const htmlResponse = (url, body, contentType = 'text/html; charset=utf-8') => ({
+        ok: true,
+        url,
+        headers: { get: (name) => String(name).toLowerCase() === 'content-type' ? contentType : null },
+        text: async () => body
+    });
+    const pageFor = (code) => '<html><script type="application/json">' + JSON.stringify({
+        media: { code, video_versions: [{ url: `https://video.cdninstagram.com/${code}.mp4` }] }
+    }) + '</script></html>';
+
+    const runtime = await createThreadsRuntime({
+        platform: fakePlatform(), captureSource: null, document, window, initialOptions: {}
+    });
+    assert.equal(await runtime.start(), true);
+    const { refetchPostMedia, getPerformanceSnapshot } = runtime.testing;
+
+    respond = (url) => htmlResponse(url, pageFor('POST_AAAA'));
+    const first = refetchPostMedia({ author: 'author', postId: 'POST_AAAA' });
+    const concurrent = refetchPostMedia({ author: 'author', postId: 'POST_AAAA' });
+    assert.equal(await first, true);
+    assert.equal(await concurrent, true);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, 'https://www.threads.com/@author/post/POST_AAAA');
+    assert.equal(requests[0].init.method, 'GET');
+    assert.match(requests[0].init.headers.accept, /^text\/html/);
+    assert.equal(getPerformanceSnapshot().videoRouteCacheEntries, 1);
+
+    // Cooldown: an immediate second request for the same post stays local.
+    assert.equal(await refetchPostMedia({ author: 'author', postId: 'POST_AAAA' }), false);
+    assert.equal(requests.length, 1);
+
+    // A redirect away from the post (for example to a login page) is ignored.
+    respond = () => htmlResponse('https://www.threads.com/login', pageFor('POST_BBBB'));
+    assert.equal(await refetchPostMedia({ author: 'author', postId: 'POST_BBBB' }), false);
+    respond = (url) => htmlResponse(url, pageFor('POST_CCCC'), 'application/json');
+    assert.equal(await refetchPostMedia({ author: 'author', postId: 'POST_CCCC' }), false);
+    assert.equal(getPerformanceSnapshot().videoRouteCacheEntries, 1);
+
+    // Invalid identities and sensitive routes never reach the network.
+    const before = requests.length;
+    assert.equal(await refetchPostMedia({ author: 'unknown', postId: 'unknown' }), false);
+    globalThis.location.href = 'https://www.threads.com/settings/privacy';
+    assert.equal(await refetchPostMedia({ author: 'author', postId: 'POST_DDDD' }), false);
+    assert.equal(requests.length, before);
+
+    await runtime.stop();
+    globalThis.location.href = 'https://www.threads.com/';
+    assert.equal(await refetchPostMedia({ author: 'author', postId: 'POST_EEEE' }), false);
+    assert.equal(requests.length, before);
+});
+
+test('media in the fullscreen viewer dialog resolves to the post named by the viewer route', async (t) => {
+    const previousLocation = globalThis.location;
+    globalThis.location = { href: 'https://www.threads.com/@author/post/POST_VIEW1/media' };
+    t.after(() => {
+        if (previousLocation === undefined) delete globalThis.location;
+        else globalThis.location = previousLocation;
+    });
+    const runtime = await createThreadsRuntime({ platform: fakePlatform() });
+    const inViewer = {
+        tagName: 'VIDEO',
+        parentElement: null,
+        closest(selector) { return selector.includes('[role="dialog"]') ? {} : null; },
+        getBoundingClientRect() { return { left: 0, top: 0, width: 800, height: 450 }; }
+    };
+    const context = runtime.testing.findPostContext(inViewer);
+    assert.equal(context.author, 'author');
+    assert.equal(context.postId, 'POST_VIEW1');
+
+    // Outside a dialog the viewer route grants nothing.
+    const outsideViewer = { ...inViewer, closest() { return null; } };
+    assert.equal(runtime.testing.findPostContext(outsideViewer).postId, 'unknown');
+
+    // A dialog on any other route keeps the ordinary lookup.
+    globalThis.location.href = 'https://www.threads.com/';
+    assert.equal(runtime.testing.findPostContext(inViewer).postId, 'unknown');
+});
+
+test('multi-video posts resolve by poster overlap on the page and by slide order in the fullscreen viewer', async (t) => {
+    const previousLocation = globalThis.location;
+    globalThis.location = { href: 'https://www.threads.com/@author/post/POST_MULTI/media' };
+    t.after(() => {
+        if (previousLocation === undefined) delete globalThis.location;
+        else globalThis.location = previousLocation;
+    });
+    const document = {
+        body: null,
+        documentElement: {},
+        scripts: [],
+        addEventListener() {},
+        removeEventListener() {},
+        getElementById() { return null; },
+        querySelector() { return null; },
+        querySelectorAll() { return []; }
+    };
+    const window = {
+        addEventListener() {},
+        removeEventListener() {},
+        setTimeout() { return 1; },
+        setInterval() { return 1; },
+        clearTimeout() {},
+        clearInterval() {},
+        cancelAnimationFrame() {},
+        getComputedStyle() { return { display: 'block', visibility: 'visible' }; }
+    };
+    const runtime = await createThreadsRuntime({
+        platform: fakePlatform(), captureSource: null, document, window, initialOptions: {}
+    });
+    const image = (name) => `https://scontent.cdninstagram.com/v/t51.2885-15/${name}.jpg`;
+    const videoUrl = (name) => `https://video.cdninstagram.com/o1/v/${name}.mp4`;
+    runtime.testing.extractVideoUrlsFromText(JSON.stringify({
+        code: 'POST_MULTI',
+        carousel_media: [
+            { image_versions2: { candidates: [{ url: image('photo-first') }] } },
+            { image_versions2: { candidates: [{ url: image('poster-a') }] }, video_versions: [{ url: videoUrl('a') }] },
+            { image_versions2: { candidates: [{ url: image('poster-b') }] }, video_versions: [{ url: videoUrl('b') }] },
+            { image_versions2: { candidates: [{ url: image('photo-last') }] } }
+        ]
+    }));
+
+    const rect = (left, width = 400, height = 700) => ({
+        left, top: 0, right: left + width, bottom: height, width, height
+    });
+    const element = (tagName, left, extra = {}) => ({
+        tagName,
+        src: '',
+        currentSrc: '',
+        poster: '',
+        parentElement: null,
+        getAttribute() { return null; },
+        querySelectorAll() { return []; },
+        closest() { return null; },
+        getBoundingClientRect() { return rect(left); },
+        ...extra
+    });
+    const img = (name, left) => element('IMG', left, {
+        src: image(name), currentSrc: image(name),
+        getAttribute(attribute) { return attribute === 'src' ? image(name) : null; }
+    });
+
+    // Fullscreen viewer: every slide mounted in order, players without posters.
+    const slides = [];
+    const viewer = {
+        parentElement: null,
+        closest() { return null; },
+        querySelectorAll() { return slides; }
+    };
+    const inViewer = (item) => Object.assign(item, {
+        closest(selector) { return selector.includes('[role="dialog"]') ? viewer : null; }
+    });
+    const viewerVideoA = inViewer(element('VIDEO', 1500, { src: 'blob:https://www.threads.com/a' }));
+    const viewerVideoB = inViewer(element('VIDEO', 3000, { src: 'blob:https://www.threads.com/b' }));
+    slides.push(inViewer(img('photo-first', 0)), viewerVideoA, viewerVideoB, inViewer(img('photo-last', 4500)));
+    assert.equal(runtime.testing.resolveVideoUrl(viewerVideoA), videoUrl('a'));
+    assert.equal(runtime.testing.resolveVideoUrl(viewerVideoB), videoUrl('b'));
+
+    // Any disagreement with the structured slots leaves the video unresolved.
+    slides.pop();
+    assert.equal(runtime.testing.resolveVideoUrl(viewerVideoA), null);
+    slides.push(inViewer(img('some-other-photo', 4500)));
+    assert.equal(runtime.testing.resolveVideoUrl(viewerVideoB), null);
+
+    // Poster overlap: the slot's poster image sits underneath its player, as
+    // in a page carousel. Slide order is unavailable here (no slides), so
+    // only the poster can identify the slot.
+    slides.length = 0;
+    const posterB = inViewer(img('poster-b', 900));
+    const slotB = {
+        parentElement: null,
+        querySelectorAll(selector) { return selector === 'img' ? [posterB] : []; }
+    };
+    const posterBackedVideo = inViewer(element('VIDEO', 900, {
+        src: 'blob:https://www.threads.com/b', parentElement: slotB
+    }));
+    assert.equal(runtime.testing.resolveVideoUrl(posterBackedVideo), videoUrl('b'));
+    const unrelatedPoster = inViewer(img('photo-first', 900));
+    const unrelatedSlot = {
+        parentElement: null,
+        querySelectorAll(selector) { return selector === 'img' ? [unrelatedPoster] : []; }
+    };
+    assert.equal(runtime.testing.resolveVideoUrl(inViewer(element('VIDEO', 900, {
+        src: 'blob:https://www.threads.com/x', parentElement: unrelatedSlot
+    }))), null);
 });

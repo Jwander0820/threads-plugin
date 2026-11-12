@@ -1,6 +1,6 @@
 # Threads Plugin Privacy Policy
 
-Last updated: 2026-08-24
+Last updated: 2026-11-12
 
 Threads Plugin provides user-invoked media download, post-text copy, and clean-link copy features for Threads. The extension has no developer-operated backend, analytics, advertising, or tracking. Processing is performed locally in the user's browser, subject to the user controls and necessary destinations described below.
 
@@ -16,7 +16,7 @@ After the user accepts the page-content disclosure, the extension may handle the
 
 The extension does not read Threads passwords, authentication cookies, payment information, or direct-message content. Its page runtime remains off on login, account, challenge, direct-message, OAuth, security, privacy, and settings routes.
 
-Advanced network-response capture requires a separate opt-in and is disabled by default. When enabled, a packaged MAIN-world script inspects only allowlisted Threads feed/post GraphQL operations on non-sensitive routes. A bounded same-page bridge sends validated post identifiers, media types and URLs, the source route, the allowlisted operation name, and random replay-prevention protocol metadata to the extension's isolated content context. Raw response bodies are not forwarded to the extension service worker, the developer, or an external server.
+Advanced network-response capture requires a separate opt-in and is disabled by default. When enabled, a packaged MAIN-world script inspects only Threads GraphQL operations from the post-listing families (feed, post, profile, and search; account, messaging, and insights queries are excluded) on non-sensitive routes. A bounded same-page bridge sends validated post identifiers, media types and URLs, the source route, the operation name, and random replay-prevention protocol metadata to the extension's isolated content context. Raw response bodies are not forwarded to the extension service worker, the developer, or an external server.
 
 ## How the data is used
 
@@ -28,10 +28,11 @@ Threads Plugin does not sell user data, use it for advertising or profiling, use
 
 The extension does not send page content or media records to the developer or to an unrelated analytics, advertising, or tracking service.
 
-Two user-requested actions necessarily place data outside the extension's in-tab memory:
+Two user-requested actions necessarily place data outside the extension's in-tab memory, and one may send a request to Threads on the user's behalf:
 
 - **Download:** Chrome makes an HTTPS request to the selected media's existing approved Threads, Instagram, CDN Instagram, or FBCDN host. That host receives the normal request needed to return the file. Chrome may retain the media URL, filename, and download record, and the downloaded file remains according to the user's Chrome and operating-system settings.
 - **Copy:** the selected post text or clean link is written to the operating-system clipboard. It remains there according to the user's operating system or clipboard-manager settings.
+- **Media lookup:** when the user clicks a download control and the open page does not hold that post's media address, the tab re-requests that post's own Threads page (the same page the browser loads when the post is opened, on the same origin, at most once per post per 30 seconds, never on sensitive routes) and reads the media address from it locally. Threads receives an ordinary page request for a post the user is already viewing; nothing is sent to the developer or any other party.
 
 No other transfer is performed by the extension. Raw GraphQL response bodies remain in the page context and are not sent through `chrome.runtime` messaging.
 

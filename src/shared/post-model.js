@@ -43,6 +43,46 @@ export function parsePostInfoFromUrl(url, baseUrl = globalThis.location?.href ||
     }
 }
 
+// The fullscreen media viewer lives at /@author/post/CODE/media. It is not a
+// post detail page, but it names the post whose media it shows.
+export function parseMediaViewerPostInfo(url, baseUrl = globalThis.location?.href || 'https://www.threads.com/') {
+    try {
+        const parsed = new URL(String(url || ''), baseUrl);
+        const match = parsed.pathname.match(/^(\/@[^/]+\/post\/[^/]+)\/media\/?$/);
+        if (!match) return null;
+        return parsePostInfoFromUrl(`${parsed.origin}${match[1]}`, baseUrl);
+    } catch {
+        return null;
+    }
+}
+
+// Canonical same-origin permalink for an on-demand refetch. Query and hash are
+// dropped so no tracking or page state is replayed.
+export function buildPostRefetchUrl(postInfo, pageUrl = globalThis.location?.href || 'https://www.threads.com/') {
+    const author = String(postInfo?.author || '');
+    const postId = normalizePostIdentity(postInfo?.postId);
+    if (!postId || postId.length < 5 || !/^[A-Za-z0-9._]{1,30}$/.test(author)) return null;
+    let origin;
+    try { origin = new URL(pageUrl).origin; } catch { return null; }
+    const url = `${origin}/@${author}/post/${postId}`;
+    return parsePostInfoFromUrl(url, pageUrl)?.postId === postId ? url : null;
+}
+
+// Threads ships post data as inert <script type="application/json"> blocks.
+// Only their text is returned; nothing from the fetched page is ever executed
+// or inserted into the document.
+export function extractInlineJsonScriptTexts(html, { maxScripts = 400, maxScriptLength = Infinity } = {}) {
+    if (typeof html !== 'string' || !html) return [];
+    const texts = [];
+    const pattern = /<script\b[^>]*\btype\s*=\s*["']application\/json["'][^>]*>([\s\S]*?)<\/script\s*>/gi;
+    let match;
+    while ((match = pattern.exec(html)) && texts.length < maxScripts) {
+        const text = match[1];
+        if (text && text.length <= maxScriptLength) texts.push(text);
+    }
+    return texts;
+}
+
 function isLikelyPostCode(value) {
     return typeof value === 'string' && /^[A-Za-z0-9_-]{5,32}$/.test(value) && !/^\d+$/.test(value);
 }
@@ -139,8 +179,12 @@ export function collectStructuredMediaUrls(value, inheritedPostCode = null) {
             if (['author', 'owner', 'profile', 'user'].includes(key)) return;
             const crossesPostBoundary = /(?:parent_post|quoted|reply_to|repost)/i.test(key);
             const childPostCode = crossesPostBoundary ? null : nextPostCode;
+            // An Instagram reel or post embedded in a Threads post arrives as
+            // linked_inline_media carrying its own Instagram shortcode. It is
+            // this post's media, so it keeps the Threads post identity just
+            // like carousel children do.
             const childPreservesDuplicateSlots = !crossesPostBoundary &&
-                (preserveDuplicateSlots || key === 'carousel_media');
+                (preserveDuplicateSlots || key === 'carousel_media' || key === 'linked_inline_media');
             visit(child, childPostCode, depth + 1, childPreservesDuplicateSlots);
         });
     };
